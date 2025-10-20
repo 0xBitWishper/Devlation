@@ -43,24 +43,22 @@ export function TokenList({ tokens, selectedToken, onSelectToken }: TokenListPro
         <button
           key={token.id}
           onClick={() => onSelectToken(token)}
-          className={`w-full p-4 rounded-xl border smooth-transition flex items-center gap-3 backdrop-blur-xl ${selectedToken?.id === token.id ? '' : 'border-border/40'}`}
+          className={`w-full p-4 rounded-xl border smooth-transition flex items-center gap-3 backdrop-blur-xl ${selectedToken?.id === token.id ? 'border-2 border-[#9945FF]' : 'border border-border/40'}`}
           style={selectedToken?.id === token.id
             ? {
-                background: "linear-gradient(90deg, rgba(153,69,255,0.18) 0%, rgba(20,241,149,0.18) 100%)",
+                background: "linear-gradient(90deg, rgba(153,69,255,0.13) 0%, rgba(20,241,149,0.13) 100%)",
                 border: "2px solid #9945FF"
               }
             : { backgroundColor: "rgba(255, 255, 255, 0.03)" }
           }
         >
-            <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center text-lg flex-shrink-0 border border-accent/20 overflow-hidden">
-              {token.logoURI ? (
-                <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
-              ) : token.icon ? (
-                <img src={token.icon} alt={token.symbol} className="w-full h-full object-contain" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">{token.symbol || '?'}</div>
-              )}
-            </div>
+          <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center text-lg flex-shrink-0 border border-accent/20 overflow-hidden">
+            {token.logoURI ? (
+              <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
+            ) : (
+              <span className="w-full h-full block" style={{ background: 'transparent' }}></span>
+            )}
+          </div>
 
           <div className="flex-1 text-left">
             <div className="font-semibold text-foreground text-sm truncate flex items-center gap-2">

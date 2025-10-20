@@ -32,31 +32,33 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
     return `${sig.slice(0, 8)}...${sig.slice(-8)}`
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
-      {/* Header */}
-      <header className="border-b border-border/40 backdrop-blur-xl sticky top-0 z-40 bg-background/80">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 hover:bg-card/50 rounded-lg smooth-transition">
-              <ArrowLeft className="w-5 h-5 text-foreground" />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 flex items-center justify-center border border-accent/20">
-                <Flame className="w-6 h-6 text-accent" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground tracking-tight">Burn History</h1>
-                <p className="text-xs text-muted-foreground">View all your token burns</p>
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
+        {/* Header */}
+  <header className="backdrop-blur-xl sticky top-0 z-40 bg-background/80">
+          <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={onBack} className="p-2 hover:bg-card/50 rounded-lg smooth-transition">
+                <ArrowLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center border border-accent/20 overflow-hidden">
+                  <img src="/devflation_logo.png" alt="Devflation Logo" className="w-8 h-8 object-contain" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground tracking-tight">Burn Tokens</h1>
+                  <p className="text-xs text-muted-foreground">View all your token burns</p>
+                </div>
               </div>
             </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-foreground">{records.length}</p>
+              <p className="text-xs text-muted-foreground">Total Burns</p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold text-foreground">{records.length}</p>
-            <p className="text-xs text-muted-foreground">Total Burns</p>
-          </div>
-        </div>
-      </header>
+        </header>
+
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
@@ -66,7 +68,7 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
             style={{ backgroundColor: "rgba(255, 255, 255, 0.05)" }}
           >
             <div className="text-5xl mb-4 opacity-60">🔥</div>
-            <p className="text-muted-foreground font-medium mb-2">No burn history yet</p>
+            <p className="text-muted-foreground font-medium mb-2">No burn tokens yet</p>
             <p className="text-sm text-muted-foreground">Start burning tokens to see them here</p>
           </div>
         ) : (

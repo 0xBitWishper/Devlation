@@ -1,11 +1,11 @@
-🔥 Devlation — Token Burn Utility for Solana
+🔥 Devflation — Token Burn Utility for Solana
 
-Devlation is a blockchain-based utility platform designed to provide a transparent, automated, and verifiable token burn mechanism for Solana developers.
+Devflation is a blockchain-based utility platform designed to provide a transparent, automated, and verifiable token burn mechanism for Solana developers.
 The project empowers token creators to reduce supply, create scarcity, and enhance long-term value — all through decentralized automation.
 
 🌐 Overview
 
-Devlation allows developers to:
+Devflation allows developers to:
 Burn tokens on-chain using the official SPL burn instruction
 Automate burns based on price, time, or fee triggers
 Track global burn statistics via dashboard and API
@@ -37,7 +37,7 @@ Fully decentralized and permissionless via scheduled keeper automation.
 
 🧠 Vision
 
-Devlation aims to become the core burn infrastructure for Solana projects, enabling any developer to integrate a trusted and automated burn system into their own token ecosystem.
+Devflation aims to become the core burn infrastructure for Solana projects, enabling any developer to integrate a trusted and automated burn system into their own token ecosystem.
 
 🗺️ Roadmap
 Phase 1 — Foundation Build
@@ -76,11 +76,11 @@ Automation: Keeper Bot (Node.js)
 
 📦 Repository Structure
 
-/devlation-core → Solana smart contract (Anchor)
-/devlation-web → Web dashboard frontend
-/devlation-api → Backend & webhook service
-/devlation-bot → Telegram & X bot
-/devlation-mobile → React Native mobile app
+/devflation-core → Solana smart contract (Anchor)
+/devflation-web → Web dashboard frontend
+/devflation-api → Backend & webhook service
+/devflation-bot → Telegram & X bot
+/devflation-mobile → React Native mobile app
 
 🔒 Smart Contract Highlights
 Built with Anchor Framework
@@ -101,13 +101,13 @@ Instruction: Burn
 Effect: Supply permanently reduced
 
 🌍 Community & Links
-Twitter: https://x.com/devlation
-Telegram: https://t.me/devlation
-GitHub: https://github.com/devlation
-Website: https://www.devlation.fun
+Twitter: https://x.com/devflation
+Telegram: https://t.me/devflation
+GitHub: https://github.com/devflation
+Website: https://www.devflation.fun
 
 
 📜 License
 This project is released under the MIT License — open for community contribution and integration.
 💬 Credits
-Created and maintained by The Devlation Team — building transparent, deflationary utilities for the Solana ecosystem.
+Created and maintained by The Devflation Team — building transparent, deflationary utilities for the Solana ecosystem.

@@ -98,8 +98,8 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
         >
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 flex items-center justify-center border border-accent/20 mx-auto mb-4">
-              <Wallet className="w-8 h-8 text-accent" />
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-[#9945FF] to-[#14F195] flex items-center justify-center border border-[#9945FF] mx-auto mb-4">
+              <Wallet className="w-8 h-8 text-white" />
             </div>
             <h2 className="text-2xl font-bold text-foreground mb-2">Connect Wallet</h2>
             <p className="text-muted-foreground">Choose your preferred Solana wallet to continue</p>
@@ -116,8 +116,8 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
                     wallet.comingSoon
                       ? "border-border/40 bg-card/20 opacity-60 cursor-not-allowed"
                       : selectedWallet === wallet.id
-                        ? "border-accent/50 bg-accent/10"
-                        : "border-border/40 bg-card/40 hover:border-accent/30 hover:bg-card/60"
+                        ? "border-2 border-[#9945FF] bg-gradient-to-r from-[#9945FF]/20 to-[#14F195]/20"
+                        : "border-border/40 bg-card/40 hover:border-[#9945FF] hover:bg-[#9945FF]/10"
                   }`}
                 >
                   <div className="flex items-center gap-3 text-left">
@@ -144,8 +144,8 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
                     </div>
                   </div>
                   {selectedWallet === wallet.id && !wallet.comingSoon && (
-                    <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center flex-shrink-0">
-                      <Check className="w-3 h-3 text-background" />
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] flex items-center justify-center flex-shrink-0">
+                      <Check className="w-3 h-3 text-white" />
                     </div>
                   )}
                 </button>
@@ -162,7 +162,7 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
             )}
             className={`w-full py-3 rounded-lg font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
               selectedWallet && !isConnecting
-                ? "bg-gradient-to-r from-accent to-accent/80 text-background hover:shadow-lg hover:shadow-accent/20"
+                ? "bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white hover:opacity-90"
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             }`}
           >
@@ -180,7 +180,7 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
 
           {/* Info & Error */}
           {errorMsg && (
-            <p className="text-xs text-red-500 text-center mt-4">{errorMsg}</p>
+            <p className="text-xs text-[#9945FF] text-center mt-4">{errorMsg}</p>
           )}
           <p className="text-xs text-muted-foreground text-center mt-6">
             {connected && publicKey

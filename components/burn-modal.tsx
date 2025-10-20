@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useToast } from "../hooks/use-toast"
+import { useIsMobile } from "./ui/use-mobile"
 import { X } from "lucide-react"
 
 interface BurnModalProps {
@@ -11,6 +12,7 @@ interface BurnModalProps {
 }
 
 export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
+  const isMobile = useIsMobile();
   const [amount, setAmount] = useState("")
   const [isChecked, setIsChecked] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -53,23 +55,45 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
       });
       return;
     }
-    if (amount) {
-      onConfirm(Number.parseFloat(amount));
+    const amt = Number.parseFloat(amount);
+    if (!amount || isNaN(amt) || amt <= 0) {
+      toast.toast({
+        title: 'Masukkan jumlah yang valid',
+        description: 'Jumlah burn harus lebih dari 0.'
+      });
+      return;
     }
+    onConfirm(amt);
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 ${isMobile ? '' : 'flex items-center justify-center'} p-4`}>
       <div
-  className="w-full max-w-md rounded-3xl backdrop-blur-xl border-2 p-8 space-y-6 smooth-transition shadow-2xl"
-        style={{ background: "rgba(20, 20, 30, 0.55)", borderImage: "linear-gradient(90deg, #9945FF 0%, #14F195 100%) 1" }}
+        className={
+          isMobile
+            ? "w-full max-w-lg mx-auto rounded-t-3xl backdrop-blur-xl border-2 p-8 space-y-6 smooth-transition shadow-2xl overflow-hidden fixed bottom-0 left-0 right-0 animate-[slideUp_0.3s_ease] h-[80vh] max-h-[95vh] min-h-[60vh]"
+            : "w-full max-w-md rounded-3xl backdrop-blur-xl border-2 p-8 space-y-6 smooth-transition shadow-2xl overflow-hidden"
+        }
+        style={{ background: "rgba(20, 20, 30, 0.55)" }}
       >
+        {/* Animasi slide up untuk bottom sheet */}
+        {isMobile && (
+          <style jsx>{`
+            @keyframes slideUp {
+              0% { transform: translateY(100%); }
+              100% { transform: translateY(0); }
+            }
+            .animate-\[slideUp_0.3s_ease\] {
+              animation: slideUp 0.3s ease;
+            }
+          `}</style>
+        )}
         {/* Header */}
-  <div className="flex items-center justify-between pb-4 border-b border-[#9945FF]/40">
+        <div className="flex items-center justify-between pb-4 border-b border-[#9945FF]/40">
           <h2 className="text-2xl font-bold text-foreground tracking-tight">Burn {token.symbol}</h2>
           <button
             onClick={onCancel}
-            className="p-2 hover:bg-card/50 rounded-lg smooth-transition text-muted-foreground hover:text-foreground"
+            className="p-2 hover:bg-[#9945FF]/20 rounded-lg smooth-transition text-muted-foreground hover:text-foreground"
           >
             <X className="w-5 h-5" />
           </button>
@@ -91,7 +115,7 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
         {/* Mint Address */}
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground font-medium">Mint Address</p>
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-card/30 border-2 border-[#9945FF] focus-within:border-[#14F195]">
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-[#9945FF]/10 border-2 border-[#9945FF] focus:border-[#14F195] text-foreground outline-none">
             <code className="flex-1 text-xs font-mono text-foreground break-all">{token.mintAddress}</code>
           </div>
         </div>
@@ -104,7 +128,7 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="w-full p-3 rounded-lg bg-card/30 border-2 border-[#9945FF] focus:border-[#14F195] text-foreground outline-none"
+            className="w-full p-3 rounded-lg bg-[#9945FF]/10 border-2 border-[#9945FF] focus:border-[#14F195] text-foreground outline-none"
           />
           {/* Slider Persentase */}
           <div className="flex items-center gap-3 mt-2">
@@ -132,7 +156,7 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
               <button
                 key={pct}
                 type="button"
-                className="flex-1 py-1.5 rounded bg-gradient-to-r from-[#9945FF]/20 to-[#14F195]/20 text-[#9945FF] font-semibold hover:bg-[#9945FF]/30 transition text-xs border border-[#9945FF]"
+                className="flex-1 py-1.5 rounded bg-gradient-to-r from-[#9945FF]/20 to-[#14F195]/20 text-[#14F195] font-semibold hover:bg-[#14F195]/30 transition text-xs border border-[#9945FF]"
                 onClick={() => {
                   if (token.balance) {
                     const val = ((token.balance * pct) / 100).toFixed(token.decimals ?? 0);
@@ -152,7 +176,7 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
             type="checkbox"
             checked={isChecked}
             onChange={(e) => setIsChecked(e.target.checked)}
-            className="mr-2"
+            className="mr-2 accent-orange-500"
           />
           <p className="text-xs text-muted-foreground font-medium">I understand the risks</p>
         </div>
@@ -161,13 +185,14 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
         <div className="flex justify-end gap-4 mt-6">
           <button
             onClick={onCancel}
-            className="w-32 py-3 rounded-lg font-semibold border border-[#9945FF] bg-gradient-to-r from-[#9945FF]/20 to-[#14F195]/20 text-[#9945FF] hover:bg-[#9945FF]/30 smooth-transition"
+            className="w-32 py-3 rounded-lg font-semibold border border-[#9945FF] bg-gradient-to-r from-[#9945FF]/20 to-[#14F195]/20 text-[#14F195] hover:bg-[#14F195]/30 smooth-transition"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
-            className="w-32 py-3 rounded-lg font-semibold border border-[#14F195] bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white hover:opacity-90 smooth-transition"
+            disabled={!isChecked || !amount || isNaN(Number(amount)) || Number(amount) <= 0}
+            className={`w-32 py-3 rounded-lg font-semibold border border-[#9945FF] bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white hover:opacity-90 smooth-transition ${(!isChecked || !amount || isNaN(Number(amount)) || Number(amount) <= 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             Burn
           </button>

@@ -41,6 +41,7 @@ import {
   DialogDescription,
   DialogClose
 } from "./ui/dialog"
+import { useIsMobile } from "./ui/use-mobile"
 
 interface RewardRecord {
   id: string
@@ -59,6 +60,7 @@ interface RewardProps {
 
 
 export function RewardPage({ records, onBack }: RewardProps) {
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false)
   const [isWinner, setIsWinner] = useState(false)
   const [claimed, setClaimed] = useState(false)
@@ -103,18 +105,19 @@ export function RewardPage({ records, onBack }: RewardProps) {
     setClaimed(true)
   }
 
+
   return (
-  <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
       {/* Header */}
-      <header className="border-b border-border/40 backdrop-blur-xl sticky top-0 z-40 bg-background/80">
+      <header className="backdrop-blur-xl sticky top-0 z-40 bg-background/80">
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button onClick={onBack} className="p-2 hover:bg-card/50 rounded-lg smooth-transition">
               <ArrowLeft className="w-5 h-5 text-foreground" />
             </button>
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#9945FF]/30 to-[#14F195]/10 flex items-center justify-center border border-accent/20">
-                <Gift className="w-6 h-6 text-accent" />
+              <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center border border-accent/20 overflow-hidden">
+                <img src="/devflation_logo.png" alt="Devlation Logo" className="w-8 h-8 object-contain" />
               </div>
               <div className="flex items-center gap-4">
                 <div>
@@ -131,10 +134,12 @@ export function RewardPage({ records, onBack }: RewardProps) {
         </div>
       </header>
 
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         <button
-          className={`w-full rounded-xl border-none py-1.5 px-3 mb-6 text-center font-bold shadow-lg smooth-transition flex items-center justify-center gap-2 ${claimed ? 'bg-gray-400 text-white opacity-60 cursor-not-allowed' : 'bg-gradient-to-r from-[#8e8dfc] via-[#5b9dfc] to-[#14F195] text-white hover:opacity-90'}`}
+          className={`w-full rounded-xl border-none py-1.5 px-3 mb-6 text-center font-bold shadow-lg smooth-transition flex items-center justify-center gap-2 relative overflow-hidden
+            ${claimed ? 'bg-gray-400 text-white opacity-60 cursor-not-allowed' : 'bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white hover:opacity-90'}`}
           onClick={!claimed ? handleClaim : undefined}
           disabled={claimed}
         >
@@ -143,13 +148,33 @@ export function RewardPage({ records, onBack }: RewardProps) {
               Claimed
             </span>
           ) : (
-            'Claim Your Reward'
+            <>
+              Claim Your Reward
+              {/* Animated light effect jika belum di-claim */}
+              <span className="absolute left-0 top-0 h-full w-full pointer-events-none">
+                <span className="block h-full w-20 bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70 animate-[moveLightBtn_2s_linear_infinite] rounded-xl" />
+              </span>
+              <style jsx>{`
+                @keyframes moveLightBtn {
+                  0% { left: 0; }
+                  100% { left: calc(100% - 5rem); }
+                }
+                .animate-\[moveLightBtn_2s_linear_infinite\] {
+                  position: absolute;
+                  left: 0;
+                  top: 0;
+                  animation: moveLightBtn 2s linear infinite;
+                }
+              `}</style>
+            </>
           )}
         </button>
         {/* Reward History Section */}
   <div className="mt-0">
           <h2 className="text-base font-bold mb-1 text-foreground">Reward History</h2>
           <p className="text-xs text-muted-foreground mb-3">See your reward claim activity below</p>
+          {/* Reward History Card Data Hidden Temporarily */}
+          {/*
           <div className="grid gap-3">
             <div className="flex items-center px-4 pb-2 pt-1">
               <div className="w-1/3 text-xs text-muted-foreground font-semibold">Date</div>
@@ -167,15 +192,27 @@ export function RewardPage({ records, onBack }: RewardProps) {
               <div className="w-1/3 text-right text-xs font-normal text-green-500">Claimed</div>
             </div>
           </div>
+          */}
         </div>
       </main>
       
       {/* Popup Dialog Reward */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent showCloseButton>
+  <DialogContent showCloseButton className={isMobile ? "fixed bottom-0 left-0 right-0 w-full max-w-lg mx-auto rounded-t-2xl animate-[slideUp_0.3s_ease] h-[80vh] max-h-[95vh] min-h-[60vh]" : undefined}>
+          {isMobile && (
+            <style jsx>{`
+              @keyframes slideUp {
+                0% { transform: translateY(100%); }
+                100% { transform: translateY(0); }
+              }
+              .animate-\[slideUp_0.3s_ease\] {
+                animation: slideUp 0.3s ease;
+              }
+            `}</style>
+          )}
           <DialogHeader>
             <DialogTitle className="flex items-center justify-center gap-2 text-2xl font-bold">
-              {isWinner ? <Gift className="w-8 h-8 text-[#14F195] animate-bounce" /> : <Flame className="w-8 h-8 text-accent animate-pulse" />}
+              {isWinner ? <Gift className="w-8 h-8 text-[#14F195] animate-bounce" /> : <Flame className="w-8 h-8 text-[#9945FF] animate-pulse" />}
               {isWinner ? "Congratulations!" : "Not Lucky Yet"}
             </DialogTitle>
             <DialogDescription className="text-center text-lg mt-2">

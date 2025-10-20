@@ -35,43 +35,61 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
       {/* Header */}
-      <header className="border-b border-border/40 backdrop-blur-xl sticky top-0 z-40 bg-background/80">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button onClick={onBack} className="p-2 hover:bg-card/50 rounded-lg smooth-transition">
-                <ArrowLeft className="w-5 h-5 text-foreground" />
-              </button>
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-accent/30 to-accent/10 flex items-center justify-center border border-accent/20">
-                  <Flame className="w-6 h-6 text-accent" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground tracking-tight">Burn Tokens</h1>
-                  <p className="text-xs text-muted-foreground">View all your token burns</p>
-                </div>
+  <header className="backdrop-blur-xl sticky top-0 z-40 bg-background/80">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={onBack} className="p-2 hover:bg-card/50 rounded-lg smooth-transition">
+              <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center border border-accent/20 overflow-hidden">
+                <img src="/devflation_logo.png" alt="Devflation Logo" className="w-8 h-8 object-contain" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground tracking-tight">Burn Tokens</h1>
+                <p className="text-xs text-muted-foreground">View all your token burns</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-semibold text-foreground">{records.length}</p>
-              <p className="text-xs text-muted-foreground">Total Burns</p>
-            </div>
           </div>
-          {/* Fees Pool Progress Bar - Keterangan di atas bar */}
-          <div className="w-full flex flex-col gap-1 mt-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-foreground tracking-wide">Fees Pool</span>
-              <span className="text-sm font-bold text-accent">40 / 100 SOL</span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-0">
-              <span className="font-medium text-foreground">Fees</span> will be used to <span className="font-semibold text-accent">buy</span>, then <span className="font-semibold text-accent">burn</span> the <span className="font-bold text-accent">$DFT</span> token.
-            </p>
-            <div className="w-full bg-border/60 rounded-xl shadow-inner h-4 flex items-center overflow-hidden border border-border/30 mt-1">
-              <div className="h-full bg-gradient-to-r from-orange-500 via-accent to-accent/70 rounded-xl animate-pulse transition-all duration-500" style={{ width: '40%' }} />
-            </div>
+          <div className="text-right">
+            <p className="text-sm font-semibold text-foreground">{records.length}</p>
+            <p className="text-xs text-muted-foreground">Total Burns</p>
           </div>
         </div>
       </header>
+
+      {/* Fees Pool Progress Bar - Keterangan di bawah header */}
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="w-full flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-foreground tracking-wide">Fees Pool</span>
+            <span className="text-sm font-bold text-[#9945FF]">0.43 / 1 SOL</span>
+          </div>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-0">
+              <span className="font-medium text-foreground">Fees</span> will be used to <span className="font-semibold text-[#9945FF]">buy</span>, then <span className="font-semibold text-[#14F195]">burn</span> the <span className="font-bold text-[#9945FF]">$DFT</span> token.
+            </p>
+          <div className="w-full bg-border/60 rounded-xl shadow-inner h-4 flex items-center overflow-hidden border border-border/30 mt-1 relative">
+            {/* Progress fill */}
+            <div className="h-full bg-gradient-to-r from-[#9945FF] to-[#14F195] rounded-xl transition-all duration-500" style={{ width: '40%' }} />
+            {/* Animated light effect */}
+            <div className="absolute left-0 top-0 h-full" style={{ width: '40%' }}>
+              <div className="h-full w-16 bg-gradient-to-r from-transparent via-[#14F195]/60 to-transparent opacity-80 animate-[moveLight_2s_linear_infinite] rounded-xl" />
+            </div>
+            <style jsx>{`
+              @keyframes moveLight {
+                0% { left: 0; }
+                100% { left: calc(100% - 4rem); }
+              }
+              .animate-\[moveLight_2s_linear_infinite\] {
+                position: absolute;
+                left: 0;
+                top: 0;
+                animation: moveLight 2s linear infinite;
+              }
+            `}</style>
+          </div>
+        </div>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">

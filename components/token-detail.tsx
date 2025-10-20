@@ -40,6 +40,8 @@ interface TokenDetailProps {
 }
 
 export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
+  // Responsive mint address
+  // Untuk TokenDetail, mint address selalu tampil full, nama token juga full
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
   }
@@ -67,13 +69,12 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
 
   return (
     <div
-      className="rounded-xl backdrop-blur-xl border-2 border-[#9945FF] p-8 space-y-6 shadow-2xl"
-      style={{ background: "rgba(20, 20, 30, 0.45)", boxShadow: "0 8px 32px 0 rgba(153,69,255,0.25)", border: "2px solid #9945FF" }}
-  // ...existing code...
+      className="rounded-xl backdrop-blur-xl border-2 border-[#9945FF] p-8 space-y-6 shadow-2xl bg-card/40"
+      style={{ background: "linear-gradient(90deg, rgba(153,69,255,0.10) 0%, rgba(20,241,149,0.10) 100%)" }}
     >
   <div className="flex items-start justify-between pb-6 border-b-2 border-[#9945FF]">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-xl bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)]/20 flex items-center justify-center text-4xl border-2 border-[#9945FF] overflow-hidden">
+          <div className="w-16 h-16 rounded-xl bg-[linear-gradient(135deg,#9945FF_0%,#14F195_100%)]/20 flex items-center justify-center text-4xl border-2 border-[#9945FF] overflow-hidden">
             {token.logoURI ? (
               <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
             ) : token.icon ? (
@@ -83,8 +84,8 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
             )}
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-foreground tracking-tight">{token.symbol ?? token.name ?? 'SPL'}</h2>
-            <p className="text-sm text-muted-foreground font-medium">{token.name ?? token.mintAddress}</p>
+            <h2 className="text-3xl font-bold text-foreground tracking-tight">{token.symbol}</h2>
+            <p className="text-sm text-muted-foreground font-medium">{token.name}</p>
           </div>
         </div>
       </div>
@@ -105,7 +106,9 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground font-medium">Mint Address</p>
   <div className="flex items-center gap-2 p-4 rounded-lg bg-card/30 border-2 border-[#9945FF]">
-          <code className="flex-1 text-xs font-mono text-foreground break-all">{token.mintAddress}</code>
+          <code className="flex-1 text-xs font-mono text-foreground break-all">
+            {token.mintAddress}
+          </code>
           <button
             onClick={() => copyToClipboard(token.mintAddress)}
             className="p-2 hover:bg-[#9945FF]/20 rounded-lg smooth-transition flex-shrink-0 text-[#9945FF]"
