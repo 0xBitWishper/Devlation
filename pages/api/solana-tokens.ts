@@ -55,6 +55,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             logoURI: v.j.logoURI ?? null,
             price: typeof v.j.usdPrice === 'number' ? v.j.usdPrice : null,
             decimals: typeof v.j.decimals === 'number' ? v.j.decimals : undefined,
+            // Preserve developer field from Jupiter (if present)
+            dev: (v.j as any)?.dev ?? (v.j as any)?.developer ?? null,
           };
         } else {
           misses.push(v.mint);
@@ -76,14 +78,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       for (const m of misses) {
         const fm = fallback[m];
         if (fm) {
-          metaMap[m] = {
-            mint: fm.mint ?? m,
-            name: fm.name ?? null,
-            symbol: fm.symbol ?? null,
-            logoURI: fm.logoURI ?? null,
-            price: typeof fm.price === 'number' ? fm.price : null,
-            decimals: typeof fm.decimals === 'number' ? fm.decimals : undefined,
-          };
+            metaMap[m] = {
+              mint: fm.mint ?? m,
+              name: fm.name ?? null,
+              symbol: fm.symbol ?? null,
+              logoURI: fm.logoURI ?? null,
+              price: typeof fm.price === 'number' ? fm.price : null,
+              decimals: typeof fm.decimals === 'number' ? fm.decimals : undefined,
+              dev: (fm as any)?.dev ?? null,
+            };
         } else {
           metaMap[m] = { mint: m, name: null, symbol: null, logoURI: null, price: null, decimals: undefined };
         }
@@ -131,6 +134,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         priceChange24h: typeof change24h === 'number' ? change24h : null,
         // 'up' | 'down' | 'flat' | null
         priceDirection,
+        // include full meta so clients can inspect custom fields like `dev`
+        meta: meta ?? null,
       };
     });
     return res.status(200).json({ tokens });

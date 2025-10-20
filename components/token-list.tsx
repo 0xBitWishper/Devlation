@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react";
+import { useWallet } from '@solana/wallet-adapter-react';
 import usePrices from '../hooks/usePrices';
 
 interface TokenListProps {
@@ -37,6 +38,9 @@ function TokenUSDValue({ token }: { token: any }) {
 }
 
 export function TokenList({ tokens, selectedToken, onSelectToken }: TokenListProps) {
+  const { publicKey } = useWallet();
+  // DEBUG: ensure tokens prop passed to TokenList
+  try { console.debug('[TokenList] tokens length', Array.isArray(tokens) ? tokens.length : 'not-array', { tokensPreview: (Array.isArray(tokens) && tokens.slice(0,5)) || tokens }); } catch (e) {}
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
       {tokens.map((token) => (
@@ -62,7 +66,19 @@ export function TokenList({ tokens, selectedToken, onSelectToken }: TokenListPro
 
           <div className="flex-1 text-left">
             <div className="font-semibold text-foreground text-sm truncate flex items-center gap-2">
-              {token.symbol ?? token.name ?? 'SPL'}
+              <span>{token.symbol ?? token.name ?? 'SPL'}</span>
+              {/* DEV badge when token metadata indicates this wallet is the dev */}
+              {(() => {
+                try {
+                  const pk = publicKey?.toBase58?.();
+                  const meta = token?.meta ?? token?.metadata ?? null;
+                  const devField = meta?.dev ?? null; 
+                  if (devField && pk && String(devField).trim() === pk) {
+                    return <span className="text-xs bg-green-600/10 text-green-400 px-2 py-0.5 rounded-full">Developer</span>;
+                  }
+                } catch (e) {}
+                return null;
+              })()}
             </div>
             <div className="text-xs text-muted-foreground truncate">
               {token.name && token.name !== token.mintAddress

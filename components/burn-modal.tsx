@@ -3,19 +3,23 @@
 import { useEffect, useState } from "react"
 import { useToast } from "../hooks/use-toast"
 import { useIsMobile } from "./ui/use-mobile"
+import { useWallet } from '@solana/wallet-adapter-react';
 import { X } from "lucide-react"
 
 interface BurnModalProps {
   token: any
-  onConfirm: (amount: number) => void
+  // method: 'instruction' = burn via SPL Burn instruction, 'send' = send to death wallet address
+  onConfirm: (amount: number, method?: 'instruction' | 'send') => void
   onCancel: () => void
+  isDev?: boolean
 }
 
 export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
-  const isMobile = useIsMobile();
   const [amount, setAmount] = useState("")
   const [isChecked, setIsChecked] = useState(false)
+  const [method, setMethod] = useState<'instruction' | 'send'>('instruction')
   const [copied, setCopied] = useState(false)
+  const [metaReady, setMetaReady] = useState<boolean>(Boolean((token as any)?.meta));
   const toast = useToast();
 
   const copyToClipboard = (text: string) => {
@@ -29,12 +33,19 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
   // shows the icon immediately even if parent hasn't enriched yet.
   useEffect(() => {
     let cancelled = false;
+    // Lock body scroll while modal is open
+    const prevOverflow = typeof document !== 'undefined' ? document.body.style.overflow : undefined;
+    try { if (typeof document !== 'undefined') document.body.style.overflow = 'hidden'; } catch (e) {}
     (async () => {
       try {
         if (!token.logoURI || !token.name || !token.symbol) {
           const { fetchTokenMetadata } = await import('../lib/solanaMetadata');
           const meta = await fetchTokenMetadata(token.mintAddress ?? token.mint);
           if (!cancelled && meta) {
+            // attach meta and normalize dev field
+            try { (token as any).meta = meta; } catch (e) {}
+            // signal metadata is now available to the UI
+            try { setMetaReady(true); } catch (e) {}
             if (!token.logoURI && meta.logoURI) token.logoURI = meta.logoURI;
             if ((!token.name || token.name === token.mintAddress) && meta.name) token.name = meta.name;
             if ((!token.symbol) && meta.symbol) token.symbol = meta.symbol;
@@ -44,8 +55,46 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
         // ignore
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; try { if (typeof document !== 'undefined' && prevOverflow !== undefined) document.body.style.overflow = prevOverflow; } catch (e) {} };
   }, [token.mintAddress]);
+
+  const { publicKey } = useWallet();
+  // derive dev status from metadata when prop not explicitly provided
+  const normalize = (v: any) => (typeof v === 'string' ? v.trim() : (v ? String(v).trim() : ''));
+  const derivedIsDev = (() => {
+    try {
+      const pk = publicKey ? publicKey.toBase58() : '';
+      if (!pk) return false;
+      const raw = (token as any)?.meta?.dev;
+      if (!raw) return false;
+      if (typeof raw === 'string') {
+        if (normalize(raw) === pk) return true;
+      }
+      const candidates = [
+        (raw as any)?.gunakan,
+        (raw as any)?.address,
+        (raw as any)?.owner,
+        (raw as any)?.wallet,
+      ];
+      for (const c of candidates) {
+        if (typeof c === 'string' && normalize(c) === pk) return true;
+      }
+      try { if (JSON.stringify(raw).includes(pk)) return true; } catch (e) {}
+      return false;
+    } catch (e) { return false; }
+  })();
+
+  // Debug: log metadata and derived status to help runtime troubleshooting
+  useEffect(() => {
+    try {
+      console.debug('[BurnModal] token.meta', (token as any)?.meta, 'derivedIsDev', derivedIsDev, 'metaReady', metaReady);
+    } catch (e) {}
+  }, [ (token as any)?.meta, derivedIsDev, metaReady ]);
+  // ensure method defaults according to derivedIsDev
+  useEffect(() => {
+    if (derivedIsDev) setMethod('instruction');
+    else setMethod('send');
+  }, [derivedIsDev]);
 
   const handleConfirm = () => {
     if (!isChecked) {
@@ -55,41 +104,18 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
       });
       return;
     }
-    const amt = Number.parseFloat(amount);
-    if (!amount || isNaN(amt) || amt <= 0) {
-      toast.toast({
-        title: 'Masukkan jumlah yang valid',
-        description: 'Jumlah burn harus lebih dari 0.'
-      });
-      return;
-    }
-    onConfirm(amt);
+    const amt = amount ? Number.parseFloat(amount) : 0;
+    onConfirm(amt, method);
   }
 
   return (
-    <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm z-50 ${isMobile ? '' : 'flex items-center justify-center'} p-4`}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div
-        className={
-          isMobile
-            ? "w-full max-w-lg mx-auto rounded-t-3xl backdrop-blur-xl border-2 p-8 space-y-6 smooth-transition shadow-2xl overflow-hidden fixed bottom-0 left-0 right-0 animate-[slideUp_0.3s_ease] h-[80vh] max-h-[95vh] min-h-[60vh]"
-            : "w-full max-w-md rounded-3xl backdrop-blur-xl border-2 p-8 space-y-6 smooth-transition shadow-2xl overflow-hidden"
-        }
-        style={{ background: "rgba(20, 20, 30, 0.55)" }}
+  className="w-full max-w-md rounded-3xl backdrop-blur-xl border-2 p-8 space-y-6 smooth-transition shadow-2xl"
+        style={{ background: "rgba(20, 20, 30, 0.55)", borderImage: "linear-gradient(90deg, #9945FF 0%, #14F195 100%) 1" }}
       >
-        {/* Animasi slide up untuk bottom sheet */}
-        {isMobile && (
-          <style jsx>{`
-            @keyframes slideUp {
-              0% { transform: translateY(100%); }
-              100% { transform: translateY(0); }
-            }
-            .animate-\[slideUp_0.3s_ease\] {
-              animation: slideUp 0.3s ease;
-            }
-          `}</style>
-        )}
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#9945FF]/40">
+  <div className="flex items-center justify-between pb-4 border-b border-[#9945FF]/40">
           <h2 className="text-2xl font-bold text-foreground tracking-tight">Burn {token.symbol}</h2>
           <button
             onClick={onCancel}
@@ -179,6 +205,62 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
             className="mr-2 accent-orange-500"
           />
           <p className="text-xs text-muted-foreground font-medium">I understand the risks</p>
+        </div>
+
+        {/* Method selection */}
+            <div className="mt-4">
+          <p className="text-sm font-medium text-muted-foreground mb-2">Burn method</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { if (derivedIsDev) setMethod('instruction'); }}
+              disabled={!derivedIsDev || !metaReady}
+              className={`flex-1 p-3 rounded-lg border ${method === 'instruction' ? 'border-[#14F195] bg-[#14F195]/10' : 'border-[#9945FF] bg-transparent'} text-sm font-medium ${(!derivedIsDev || !metaReady) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Burn via Instruction
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (!derivedIsDev) setMethod('send'); }}
+              disabled={derivedIsDev || !metaReady}
+              className={`flex-1 p-3 rounded-lg border ${method === 'send' ? 'border-[#14F195] bg-[#14F195]/10' : 'border-[#9945FF] bg-transparent'} text-sm font-medium ${(derivedIsDev || !metaReady) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              Send to Death Wallet
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {method === 'instruction' ? (
+              <>Burn via instruction will call the token program's burn instruction to reduce total supply. This permanently destroys tokens on-chain.</>
+            ) : (
+              <>Send to Death Wallet transfers tokens to a centralized 'dead' address. This is irreversible but depends on the destination account behavior.</>
+            )}
+          </p>
+          {!metaReady && (
+            <p className="text-xs text-yellow-400 mt-2">Waiting for token metadata…</p>
+          )}
+          {method === 'send' && (
+            <div className="mt-3">
+              <p className="text-xs text-muted-foreground font-medium">Death Wallet Address</p>
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-card/30 border-2 border-[#9945FF] focus-within:border-[#14F195]">
+                <code className="flex-1 text-xs font-mono text-foreground break-all">1nc1nerator11111111111111111111111111111111</code>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard('1nc1nerator11111111111111111111111111111111')}
+                  className="text-xs px-2 py-1 rounded bg-[#9945FF]/10 hover:bg-[#9945FF]/20"
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                <a
+                  href={`https://explorer.solana.com/address/1nc1nerator11111111111111111111111111111111`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs underline"
+                >
+                  Explorer
+                </a>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}

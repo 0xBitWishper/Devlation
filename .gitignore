@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/data
 
 # next.js
 /.next/
@@ -25,3 +26,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+test-env.env.local
