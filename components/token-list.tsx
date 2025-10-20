@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react";
+import usePrices from '../hooks/usePrices';
 
 interface TokenListProps {
   tokens: any[]
@@ -10,59 +11,27 @@ interface TokenListProps {
 
 // Single, clean USD value component that queries Jupiter price API
 function TokenUSDValue({ token }: { token: any }) {
-  const [usd, setUsd] = useState<number | null>(null);
-  const [change, setChange] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    let cancelled = false;
-    const fetchPrice = async () => {
-      try {
-        let price: number | null = null;
-        let pct: number | null = null;
-        if (token.symbol === 'SOL') {
-          // Fetch SOL price and 24h change from CoinGecko
-          const res = await fetch('https://api.coingecko.com/api/v3/coins/solana?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false');
-          if (!res.ok) return;
-          const data = await res.json();
-          price = data.market_data?.current_price?.usd ?? null;
-          pct = data.market_data?.price_change_percentage_24h ?? null;
-        } else {
-          // SPL token: Jupiter (no 24h change)
-          const res = await fetch(`https://price.jup.ag/v4/price?ids=${token.mintAddress}`);
-          if (!res.ok) return;
-          const data = await res.json();
-          price = data.data?.[token.mintAddress]?.price ?? null;
-        }
-        if (!cancelled && price) setUsd((token.balance ?? 0) * price);
-        if (!cancelled && pct !== null) setChange(pct);
-      } catch (e) {
-        // silent
-      }
-    };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [token.balance, token.mintAddress, token.symbol]);
-
-  if (usd === null) return <div className="text-xs text-muted-foreground">--</div>;
+  const mint = token.mintAddress ?? token.mint;
+  const { prices } = usePrices(mint ? [mint] : [], { interval: 1000 });
+  const info = mint ? prices[mint] : null;
+  const unit = info?.usdPrice ?? token.usdPrice ?? token.price ?? null;
+  const change = info?.priceChange24h ?? token.priceChange24h ?? token.priceChange ?? null;
+  if (unit === null || unit === undefined) return <div className="text-xs text-muted-foreground">--</div>;
+  const usd = (token.balance ?? 0) * unit;
   return (
     <div className="text-xs text-muted-foreground flex items-center gap-2">
-      {token.symbol === 'SOL' && change !== null ? (
-        <>
-          {change > 0 ? (
-            <span className="text-green-500 flex items-center gap-0.5">▲ {Math.abs(change).toFixed(2)}%</span>
-          ) : (
-            <span className="text-red-500 flex items-center gap-0.5">▼ {Math.abs(change).toFixed(2)}%</span>
-          )}
-        </>
+      {change !== null && change !== undefined ? (
+        change > 0 ? (
+          <span className="text-green-500 flex items-center gap-0.5">▲ {Math.abs(change).toFixed(2)}%</span>
+        ) : change < 0 ? (
+          <span className="text-red-500 flex items-center gap-0.5">▼ {Math.abs(change).toFixed(2)}%</span>
+        ) : (
+          <span className="text-muted-foreground">▬ {Math.abs(change).toFixed(2)}%</span>
+        )
       ) : (
         <span className="text-muted-foreground">--</span>
       )}
-  <span>${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+      <span>${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
     </div>
   );
 }
@@ -83,24 +52,26 @@ export function TokenList({ tokens, selectedToken, onSelectToken }: TokenListPro
             : { backgroundColor: "rgba(255, 255, 255, 0.03)" }
           }
         >
-          <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center text-lg flex-shrink-0 border border-accent/20 overflow-hidden">
-            {token.logoURI ? (
-              <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
-            ) : (
-              <span className="w-full h-full block" style={{ background: 'transparent' }}></span>
-            )}
-          </div>
+            <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center text-lg flex-shrink-0 border border-accent/20 overflow-hidden">
+              {token.logoURI ? (
+                <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
+              ) : token.icon ? (
+                <img src={token.icon} alt={token.symbol} className="w-full h-full object-contain" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">{token.symbol || '?'}</div>
+              )}
+            </div>
 
           <div className="flex-1 text-left">
             <div className="font-semibold text-foreground text-sm truncate flex items-center gap-2">
-              {token.symbol}
+              {token.symbol ?? token.name ?? 'SPL'}
             </div>
             <div className="text-xs text-muted-foreground truncate">
               {token.name && token.name !== token.mintAddress
                 ? token.name
                 : (typeof token.mintAddress === 'string' && token.mintAddress.length > 10
                   ? `${token.mintAddress.slice(0, 4)}...${token.mintAddress.slice(-4)}`
-                  : token.mintAddress)}
+                  : (token.mintAddress || 'Unknown'))}
             </div>
           </div>
 

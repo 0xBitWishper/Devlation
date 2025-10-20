@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useToast } from "../hooks/use-toast"
 import { X } from "lucide-react"
 
@@ -21,6 +21,29 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  // Enrich token metadata when modal mounts (logoURI / name / symbol)
+  // This duplicates the small enrichment from token-detail but ensures the modal
+  // shows the icon immediately even if parent hasn't enriched yet.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!token.logoURI || !token.name || !token.symbol) {
+          const { fetchTokenMetadata } = await import('../lib/solanaMetadata');
+          const meta = await fetchTokenMetadata(token.mintAddress ?? token.mint);
+          if (!cancelled && meta) {
+            if (!token.logoURI && meta.logoURI) token.logoURI = meta.logoURI;
+            if ((!token.name || token.name === token.mintAddress) && meta.name) token.name = meta.name;
+            if ((!token.symbol) && meta.symbol) token.symbol = meta.symbol;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token.mintAddress]);
 
   const handleConfirm = () => {
     if (!isChecked) {
@@ -54,8 +77,14 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
 
         {/* Token Icon */}
         <div className="flex justify-center">
-          <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-[#9945FF]/30 to-[#14F195]/20 flex items-center justify-center text-5xl border-2 border-[#9945FF]">
-            {token.icon}
+          <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-[#9945FF]/30 to-[#14F195]/20 flex items-center justify-center text-5xl border-2 border-[#9945FF] overflow-hidden">
+            {token.logoURI ? (
+              <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
+            ) : token.icon ? (
+              <img src={token.icon} alt={token.symbol} className="w-full h-full object-contain" />
+            ) : (
+              <div className="text-4xl font-bold text-foreground">{token.symbol || '?'}</div>
+            )}
           </div>
         </div>
 

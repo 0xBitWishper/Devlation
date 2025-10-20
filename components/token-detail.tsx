@@ -2,65 +2,33 @@
 
 
 import React, { useEffect, useState } from "react";
+import usePrices from '../hooks/usePrices';
 import { Copy, Flame } from "lucide-react";
 // Komponen harga USDC dan indikator tren
 function TokenUSDCDetail({ token }: { token: any }) {
-  const [usd, setUsd] = useState<number | null>(null);
-  const [change, setChange] = useState<number | null>(null);
-  useEffect(() => {
-    setUsd(null); // Reset nominal USDC setiap token berubah
-    let cancelled = false;
-    const fetchPrice = async () => {
-      try {
-        let price: number | null = null;
-        let pct: number | null = null;
-        if (token.symbol === 'SOL') {
-          const res = await fetch('https://api.coingecko.com/api/v3/coins/solana?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false');
-          if (!res.ok) return;
-          const data = await res.json();
-          price = data.market_data?.current_price?.usd ?? null;
-          pct = data.market_data?.price_change_percentage_24h ?? null;
-          if (!cancelled && price) setUsd((token.balance ?? 0) * price);
-          if (!cancelled && pct !== null) setChange(pct);
-        } else {
-          // Debug log
-          if (typeof window !== 'undefined') {
-            // eslint-disable-next-line no-console
-            console.log('[TokenUSDCDetail] mintAddress:', token.mintAddress, 'balance:', token.balance);
-          }
-          const res = await fetch(`https://price.jup.ag/v4/price?ids=${token.mintAddress}`);
-          let priceFetched = 0;
-          if (res.ok) {
-            const data = await res.json();
-            priceFetched = data.data?.[token.mintAddress]?.price ?? 0;
-            if (typeof window !== 'undefined') {
-              // eslint-disable-next-line no-console
-              console.log('[TokenUSDCDetail] Jupiter price:', priceFetched);
-            }
-          }
-          if (!cancelled) setUsd((token.balance ?? 0) * priceFetched);
-        }
-      } catch {}
-    };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 15000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [token.balance, token.mintAddress, token.symbol]);
+  const mint = token.mintAddress ?? token.mint;
+  const { prices } = usePrices(mint ? [mint] : [], { interval: 1000 });
+  const p = mint ? prices[mint] : null;
+  const unitPrice = p?.usdPrice ?? token.usdPrice ?? token.price ?? null;
+  const change = p?.priceChange24h ?? token.priceChange24h ?? token.priceChange ?? null;
+  const usd = (token.balance ?? 0) * (unitPrice ?? 0);
+
   return (
     <div className="flex flex-col items-start">
       <div className="flex items-center gap-2">
-        <span className="text-2xl font-bold text-foreground">${usd !== null ? usd.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--'}</span>
-        {token.symbol === 'SOL' && change !== null ? (
-          <>
-            {change > 0 ? (
-              <span className="text-green-500 flex items-center gap-0.5 text-xs">▲ {Math.abs(change).toFixed(2)}%</span>
-            ) : (
-              <span className="text-red-500 flex items-center gap-0.5 text-xs">▼ {Math.abs(change).toFixed(2)}%</span>
-            )}
-          </>
+        <span className="text-2xl font-bold text-foreground">{unitPrice !== null && unitPrice !== undefined ? `$${unitPrice.toLocaleString(undefined, { maximumFractionDigits: 6 })}` : '--'}</span>
+        {change !== null && change !== undefined ? (
+          change > 0 ? (
+            <span className="text-green-500 flex items-center gap-0.5 text-xs">▲ {Math.abs(change).toFixed(2)}%</span>
+          ) : (
+            <span className="text-red-500 flex items-center gap-0.5 text-xs">▼ {Math.abs(change).toFixed(2)}%</span>
+          )
         ) : (
           <span className="text-muted-foreground text-xs">--</span>
         )}
+      </div>
+      <div className="mt-1">
+        <span className="text-xs text-muted-foreground">{usd ? `$${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })} total` : ''}</span>
       </div>
     </div>
   );
@@ -76,6 +44,27 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
     navigator.clipboard.writeText(text)
   }
 
+  // Enrich token metadata on mount so UI shows symbol/name/logo quickly
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!token.logoURI || !token.name || !token.symbol) {
+          const { fetchTokenMetadata } = await import('../lib/solanaMetadata');
+          const meta = await fetchTokenMetadata(token.mintAddress ?? token.mint);
+          if (!cancelled && meta) {
+            if (!token.logoURI && meta.logoURI) token.logoURI = meta.logoURI;
+            if ((!token.name || token.name === token.mintAddress) && meta.name) token.name = meta.name;
+            if ((!token.symbol) && meta.symbol) token.symbol = meta.symbol;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token.mintAddress]);
+
   return (
     <div
       className="rounded-xl backdrop-blur-xl border-2 border-[#9945FF] p-8 space-y-6 shadow-2xl"
@@ -87,13 +76,15 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
           <div className="w-16 h-16 rounded-xl bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)]/20 flex items-center justify-center text-4xl border-2 border-[#9945FF] overflow-hidden">
             {token.logoURI ? (
               <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
+            ) : token.icon ? (
+              <img src={token.icon} alt={token.symbol} className="w-full h-full object-contain" />
             ) : (
-              token.icon
+              <div className="text-2xl font-bold text-foreground">{token.symbol || '?'}</div>
             )}
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-foreground tracking-tight">{token.symbol}</h2>
-            <p className="text-sm text-muted-foreground font-medium">{token.name}</p>
+            <h2 className="text-3xl font-bold text-foreground tracking-tight">{token.symbol ?? token.name ?? 'SPL'}</h2>
+            <p className="text-sm text-muted-foreground font-medium">{token.name ?? token.mintAddress}</p>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { useToast } from "../hooks/use-toast"
 import { BurnModal } from "./burn-modal"
 import { Search, Filter, Flame, Home } from "lucide-react"
 import {
@@ -17,7 +18,13 @@ import { useWallet } from "@solana/wallet-adapter-react"
 import { useConnection } from "@solana/wallet-adapter-react"
 import { PublicKey, Transaction } from "@solana/web3.js"
 import { getAssociatedTokenAddress, createBurnInstruction } from "@solana/spl-token"
-import { useEffect, useRef } from "react"
+// (useEffect/useRef consolidated above)
+
+// Simple in-memory caches to reduce repeated RPC/API calls during wallet switching.
+// These live at module scope so they persist while the dev server is running.
+const TOKEN_CACHE_TTL = 30 * 1000; // 30 seconds
+const tokenListCache: Map<string, { ts: number; tokens: any[] }> = new Map();
+const balanceCache: Map<string, { ts: number; sol: number }> = new Map();
 
 interface DashboardProps {
   onBurnClick: (token: any) => void
@@ -30,67 +37,344 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
   const [tokensOwned, setTokensOwned] = useState<any[]>([]);
   const [tokensError, setTokensError] = useState<string | null>(null);
 
+  // track mounted to avoid setting state after unmount
+  const mountedRef = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    setTokensOwned([]);
-    setTokensError(null);
-    async function fetchTokens() {
-      if (publicKey) {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const fetchInFlightRef = useRef<boolean>(false);
+  const fetchPendingRef = useRef<string | null>(null);
+  // Retry trackers to schedule exponential backoff when 429/403 encountered
+  const tokenRetryRef = useRef<Map<string, { count: number; timer?: ReturnType<typeof setTimeout> }>>(new Map());
+  const balanceRetryRef = useRef<Map<string, { count: number; timer?: ReturnType<typeof setTimeout> }>>(new Map());
+  const MAX_RETRIES = 6;
+  const BASE_DELAY = 500; // ms
+
+  const fetchTokens = useCallback(async (pubKeyString?: string) => {
+    if (!connection) return;
+    try {
+      // coalescing: if a fetch is already in-flight, remember requested pubKey and return
+      if (!fetchInFlightRef.current) {
+        fetchInFlightRef.current = true;
+      } else {
+        fetchPendingRef.current = pubKeyString ?? null;
+        return;
+      }
+      if (!pubKeyString && !publicKey) {
+        if (mountedRef.current) setTokensOwned([]);
+        return;
+      }
+      const targetPubKey = pubKeyString ? new PublicKey(pubKeyString) : publicKey;
+
+      if (!targetPubKey) {
+        if (mountedRef.current) setTokensOwned([]);
+        return;
+      }
+
+      if (mountedRef.current) {
+        setTokensOwned([]);
+        setTokensError(null);
+      }
+
+      // Decide whether to prefer server-side API instead of calling the browser RPC directly.
+      // Reasons: user previously hit a forbidden RPC from the browser, or the connection endpoint
+      // is the public mainnet RPC which often forbids browser-origin requests (403).
+      const forceServer = typeof window !== 'undefined' && window.localStorage?.getItem('devlation_force_server_rpc') === 'true';
+      let preferServer = !!forceServer;
+      try {
+        const endpoint = (connection as any)?.rpcEndpoint || (connection as any)?.rpcUrl || (connection as any)?._rpcEndpoint || null;
+        if (endpoint && typeof endpoint === 'string') {
+          // common public host used by default clients
+          if (endpoint.includes('api.mainnet-beta.solana.com') || endpoint.includes('mainnet-beta')) {
+            preferServer = true;
+            try { if (typeof window !== 'undefined') window.localStorage?.setItem('devlation_force_server_rpc', 'true'); } catch (e) {}
+          }
+        }
+      } catch (e) {}
+      // Try cache first
+      try {
+        const key = targetPubKey.toBase58();
+        const cached = tokenListCache.get(key);
+        if (cached && Date.now() - cached.ts < TOKEN_CACHE_TTL) {
+          if (mountedRef.current) setTokensOwned(cached.tokens);
+          return;
+        }
+      } catch (e) {}
+
+      if (preferServer) {
         try {
-          const res = await fetch(`/api/solana-tokens?publicKey=${publicKey.toBase58()}`);
-          const data = await res.json();
-          if (!cancelled) {
-            if (Array.isArray(data.tokens)) {
-              setTokensOwned(data.tokens);
-            } else {
-              setTokensError("Gagal mengambil data token. Coba refresh atau cek koneksi wallet.");
-            }
+          const apiRes = await fetch(`/api/solana-tokens?publicKey=${targetPubKey.toBase58()}`);
+          const data = await apiRes.json();
+          if (Array.isArray(data.tokens)) {
+            if (mountedRef.current) setTokensOwned(data.tokens);
+            try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: data.tokens }); } catch (e) {}
+            return;
           }
         } catch (e) {
-          if (!cancelled) setTokensError("Gagal mengambil data token. Coba refresh atau cek koneksi wallet.");
+          // fallthrough to try client RPC below
         }
-      } else {
-        setTokensOwned([]);
+      }
+
+      try {
+        let resp;
+        try {
+          resp = await connection.getParsedTokenAccountsByOwner(targetPubKey, { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') });
+        } catch (rpcErr: any) {
+          // If RPC returns 403 (forbidden) from public RPC endpoints when called from the browser,
+          // prefer server API for subsequent calls and avoid noisy repeated logs.
+          const msg = rpcErr?.message ?? '';
+          const code = rpcErr?.code ?? rpcErr?.status ?? null;
+          const isForbidden = msg.includes('403') || code === 403 || (rpcErr?.response && rpcErr.response.status === 403);
+          try { if (isForbidden && typeof window !== 'undefined') window.localStorage?.setItem('devlation_force_server_rpc', 'true'); } catch (e) {}
+          if (!isForbidden) {
+            // Log non-403 RPC errors for debugging
+            // eslint-disable-next-line no-console
+            console.warn('Client RPC call failed, falling back to server API:', rpcErr);
+          }
+          try {
+            const apiRes = await fetch(`/api/solana-tokens?publicKey=${targetPubKey.toBase58()}`);
+            const data = await apiRes.json();
+            if (Array.isArray(data.tokens)) {
+              if (mountedRef.current) setTokensOwned(data.tokens);
+              return;
+            } else {
+              throw new Error('Server API returned invalid token list');
+            }
+          } catch (apiErr) {
+            // eslint-disable-next-line no-console
+            console.error('Fallback server API also failed:', apiErr);
+            throw rpcErr;
+          }
+        }
+
+        const initial = resp.value.map((acc: any) => {
+          const info = acc.account.data.parsed.info;
+          return {
+            mint: info.mint,
+            amount: info.tokenAmount?.uiAmount ?? 0,
+            decimals: info.tokenAmount?.decimals ?? 0,
+          };
+        });
+
+        const uniqueMints = Array.from(new Set(initial.map((t: any) => t.mint)));
+        const { fetchMultipleMetadata, fetchJupiterPrices } = await import('../lib/solanaMetadata');
+        const metaMap = await fetchMultipleMetadata(uniqueMints);
+        const priceMap = await fetchJupiterPrices(uniqueMints);
+
+        const tokensArr = initial.map((t: any, idx: number) => {
+          const meta = metaMap[t.mint] ?? null;
+          const usdPrice = priceMap?.[t.mint]?.usdPrice ?? meta?.price ?? null;
+          return {
+            id: idx + 1,
+            mint: t.mint,
+            symbol: meta?.symbol ?? (t.decimals === 0 ? 'NFT' : undefined),
+            name: meta?.name ?? undefined,
+            amount: t.amount,
+            balance: t.amount,
+            decimals: typeof meta?.decimals === 'number' ? meta.decimals : t.decimals,
+            mintAddress: t.mint,
+            logoURI: meta?.logoURI ?? null,
+            icon: undefined,
+            usdPrice: typeof usdPrice === 'number' ? usdPrice : null,
+          };
+        });
+
+            if (mountedRef.current) setTokensOwned(tokensArr);
+            try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: tokensArr }); } catch (e) {}
+            // success -> clear any retry state
+            try { tokenRetryRef.current.delete(targetPubKey.toBase58()); } catch (e) {}
+      } catch (e) {
+        // If rate-limited or forbidden, schedule a retry with exponential backoff
+        const msg = String((e as any)?.message ?? e);
+        const code = (e as any)?.code ?? (e as any)?.status ?? null;
+        const isRateOrForbidden = msg.includes('429') || msg.toLowerCase().includes('too many requests') || msg.includes('403') || code === 429 || code === 403;
+        try {
+          const key = targetPubKey?.toBase58?.() ?? (pubKeyString ?? 'unknown');
+          if (isRateOrForbidden) {
+            const map = tokenRetryRef.current;
+            const entry = map.get(key) ?? { count: 0, timer: undefined };
+            if (!entry.timer && entry.count < MAX_RETRIES) {
+              const delay = Math.min(16000, BASE_DELAY * Math.pow(2, entry.count));
+              entry.count += 1;
+              entry.timer = setTimeout(() => {
+                entry.timer = undefined;
+                map.set(key, entry);
+                // attempt again
+                try { fetchTokens(pubKeyString); } catch (err) {}
+              }, delay);
+              map.set(key, entry);
+            } else if (entry.count >= MAX_RETRIES) {
+              if (mountedRef.current) setTokensError('Terjadi terlalu banyak permintaan. Coba lagi nanti.');
+            }
+            return;
+          }
+        } catch (inner) {}
+        // non-rate errors fallthrough to show generic message
+        // eslint-disable-next-line no-console
+        console.error('fetchTokens error:', e);
+        if (mountedRef.current) setTokensError("Gagal mengambil data token. Coba refresh atau cek koneksi wallet.");
+      }
+    } finally {
+      // clear inFlight and handle pending rerun
+      const pending = fetchPendingRef.current ?? null;
+      fetchInFlightRef.current = false;
+      fetchPendingRef.current = null;
+      if (pending !== null) {
+        // small delay to avoid immediate flood
+        setTimeout(() => fetchTokens(pending ?? undefined), 150);
       }
     }
-    fetchTokens();
-    return () => { cancelled = true; };
-  }, [publicKey]);
+  }, [publicKey, connection]);
+  // types for runtime fields
+  (fetchTokens as any).inFlight = null;
+  (fetchTokens as any).pendingPubKey = null;
   const [solBalance, setSolBalance] = useState<number | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const balanceRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setSolBalance(null); // Reset to loading state
-    setBalanceError(null);
-    async function fetchBalance() {
-      if (publicKey) {
-        try {
-          const res = await fetch(`/api/solana-balance?publicKey=${publicKey.toBase58()}`);
-          const data = await res.json();
-          if (!cancelled) {
-            if (data.sol !== undefined) {
-              setSolBalance(data.sol);
-              balanceRef.current = data.sol;
-            } else {
-              setSolBalance(null);
-              setBalanceError("Gagal mengambil saldo SOL. Coba refresh atau cek koneksi wallet.");
-            }
+  const fetchBalance = useCallback(async (pubKeyString?: string) => {
+    const target = pubKeyString ? new PublicKey(pubKeyString) : publicKey;
+    try {
+      if (!target) {
+        if (mountedRef.current) setSolBalance(null);
+        return;
+      }
+      // Try cache first
+      try {
+        const key = target.toBase58();
+        const cached = balanceCache.get(key);
+        if (cached && Date.now() - cached.ts < TOKEN_CACHE_TTL) {
+          if (mountedRef.current) {
+            setSolBalance(cached.sol);
+            balanceRef.current = cached.sol;
           }
-        } catch (e) {
-          if (!cancelled) {
-            setSolBalance(null);
-            setBalanceError("Gagal mengambil saldo SOL. Coba refresh atau cek koneksi wallet.");
+          return;
+        }
+      } catch (e) {}
+      if (mountedRef.current) {
+        setSolBalance(null);
+        setBalanceError(null);
+      }
+      const res = await fetch(`/api/solana-balance?publicKey=${target.toBase58()}`);
+      const data = await res.json();
+      if (mountedRef.current) {
+        if (data.sol !== undefined) {
+          setSolBalance(data.sol);
+          balanceRef.current = data.sol;
+          try { balanceCache.set(target.toBase58(), { ts: Date.now(), sol: data.sol }); } catch (e) {}
+          // success -> clear any retry state
+          try { balanceRetryRef.current.delete(target.toBase58()); } catch (e) {}
+        } else {
+          setSolBalance(null);
+          setBalanceError("Gagal mengambil saldo SOL. Coba refresh atau cek koneksi wallet.");
+        }
+      }
+  } catch (e) {
+      // Schedule retry on 429/403
+      const msg = String((e as any)?.message ?? e);
+      const code = (e as any)?.code ?? (e as any)?.status ?? null;
+      const isRateOrForbidden = msg.includes('429') || msg.toLowerCase().includes('too many requests') || msg.includes('403') || code === 429 || code === 403;
+      try {
+        const key = target?.toBase58?.() ?? (pubKeyString ?? 'unknown');
+        if (isRateOrForbidden) {
+          const map = balanceRetryRef.current;
+          const entry = map.get(key) ?? { count: 0, timer: undefined };
+          if (!entry.timer && entry.count < MAX_RETRIES) {
+            const delay = Math.min(16000, BASE_DELAY * Math.pow(2, entry.count));
+            entry.count += 1;
+            entry.timer = setTimeout(() => {
+              entry.timer = undefined;
+              map.set(key, entry);
+              try { fetchBalance(pubKeyString); } catch (err) {}
+            }, delay);
+            map.set(key, entry);
+            return;
+          } else if (entry.count >= MAX_RETRIES) {
+            if (mountedRef.current) setBalanceError('Terjadi terlalu banyak permintaan. Coba lagi nanti.');
+            return;
           }
         }
-      } else {
+      } catch (inner) {}
+      if (mountedRef.current) {
         setSolBalance(null);
+        setBalanceError("Gagal mengambil saldo SOL. Coba refresh atau cek koneksi wallet.");
       }
     }
-    fetchBalance();
-    return () => { cancelled = true; };
   }, [publicKey]);
+
+  // Call initial fetches when publicKey or connection changes
+  useEffect(() => {
+    fetchTokens();
+    fetchBalance();
+  }, [fetchTokens, fetchBalance]);
+
+  // Cleanup any retry timers when unmounting
+  useEffect(() => {
+    return () => {
+      try {
+        for (const [, v] of tokenRetryRef.current) {
+          if (v.timer) clearTimeout(v.timer as any);
+        }
+      } catch (e) {}
+      try {
+        for (const [, v] of balanceRetryRef.current) {
+          if (v.timer) clearTimeout(v.timer as any);
+        }
+      } catch (e) {}
+    };
+  }, []);
+
+  // Extra safeguard: if publicKey changes (from adapter/react) trigger immediate refresh
+  useEffect(() => {
+    // publicKey may be undefined/null on disconnect
+    // Debounce slightly and prefer server API while switching wallets to avoid 403 from
+    // browser-based RPC endpoints during extension account switches.
+    (async () => {
+      // small delay to allow adapter/provider to settle
+      await new Promise((r) => setTimeout(r, 150));
+      try { if (typeof window !== 'undefined') window.localStorage?.setItem('devlation_force_server_rpc', 'true'); } catch (e) {}
+      try {
+        await fetchTokens();
+        await fetchBalance();
+      } finally {
+        try { if (typeof window !== 'undefined') window.localStorage?.removeItem('devlation_force_server_rpc'); } catch (e) {}
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicKey]);
+
+  // Listen for wallet change events and immediately re-fetch with toast
+  const { toast } = useToast();
+  useEffect(() => {
+    const handler = async (e: any) => {
+      const newKey = e?.detail?.publicKey ?? null;
+      if (mountedRef.current) {
+        setTokensOwned([]);
+        setSolBalance(null);
+      }
+      // show toast while we refresh
+      const t = toast({ title: 'Wallet changed', description: 'Loading wallet data...', open: true });
+      const pub = newKey ?? undefined;
+      // small delay to let provider/adapter update React state
+      await new Promise((r) => setTimeout(r, 50));
+      // To avoid browser RPC 403/403 Forbidden during rapid wallet switches (extensions may block
+      // in-flight RPCs), set a temporary flag so fetchTokens will prefer the server API.
+      try {
+        try { if (typeof window !== 'undefined') window.localStorage?.setItem('devlation_force_server_rpc', 'true'); } catch (e) {}
+        await fetchTokens(pub);
+        await fetchBalance(pub);
+      } finally {
+        // Remove the temporary flag so future normal browser RPCs can be attempted again
+        try { if (typeof window !== 'undefined') window.localStorage?.removeItem('devlation_force_server_rpc'); } catch (e) {}
+        // dismiss toast
+        try { t.dismiss(); } catch (e) {}
+      }
+    };
+    window.addEventListener('devlation:walletChanged', handler as EventListener);
+    return () => window.removeEventListener('devlation:walletChanged', handler as EventListener);
+  }, [fetchTokens, fetchBalance, toast]);
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [selectedToken, setSelectedToken] = useState<any>(null)
@@ -130,16 +414,25 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
     ...solToken,
     ...tokensOwned.map((token, idx) => {
       // Prioritaskan metadata dari response API (token), lalu dari tokenMeta (Solana Token List), lalu fallback logo
-      const meta = tokenMeta[token.mint] || {};
-      const fallbackLogo = `https://cdn.jsdelivr.net/gh/solana-labs/token-list@main/assets/mainnet/${token.mint}/logo.png`;
+      const mint = token.mint || token.mintAddress || token.mintAddress?.toString();
+      const meta = tokenMeta[mint] || {};
+      const fallbackLogo = `https://cdn.jsdelivr.net/gh/solana-labs/token-list@main/assets/mainnet/${mint}/logo.png`;
+
+      // token.logoURI might be null (normalized), prefer any available source
+  const logoURI = token.logoURI ?? token.logo ?? meta.logoURI ?? meta.logo ?? fallbackLogo;
+  const balance = token.amount ?? token.balance ?? 0;
+  const decimals = token.decimals ?? meta.decimals ?? 0;
+  const symbol = token.symbol ?? meta.symbol ?? (decimals === 0 ? 'NFT' : undefined);
+  const name = token.name ?? meta.name ?? mint;
+
       return {
         id: idx + 1,
-        symbol: token.symbol || meta.symbol || token.mint?.slice(0, 4) || 'SPL',
-        name: token.name || meta.name || token.mint,
-        balance: token.amount,
-        decimals: token.decimals,
-        mintAddress: token.mint,
-        logoURI: token.logoURI || meta.logoURI || fallbackLogo,
+        symbol,
+        name,
+        balance,
+        decimals,
+        mintAddress: mint,
+        logoURI,
         icon: '',
       };
     })
@@ -148,9 +441,9 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
   // Debug log tokensOwned dan tokens
   if (typeof window !== 'undefined') {
     // eslint-disable-next-line no-console
-    console.log('tokensOwned:', tokensOwned);
+    //console.log('tokensOwned:', tokensOwned);
     // eslint-disable-next-line no-console
-    console.log('tokens (mapped):', tokens);
+    //console.log('tokens (mapped):', tokens);
   }
 
   const filteredTokens = tokens.filter(
@@ -162,9 +455,9 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
   // Debug log tokensOwned dan tokens (setelah semua variabel dideklarasikan)
   if (typeof window !== 'undefined') {
     // eslint-disable-next-line no-console
-    console.log('tokensOwned:', tokensOwned);
+    //console.log('tokensOwned:', tokensOwned);
     // eslint-disable-next-line no-console
-    console.log('tokens (mapped):', tokens);
+    //console.log('tokens (mapped):', tokens);
   }
 
   const router = useRouter();
