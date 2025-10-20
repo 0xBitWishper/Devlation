@@ -2,6 +2,7 @@
 
 
 import React, { useEffect, useState } from "react";
+import { useWallet } from '@solana/wallet-adapter-react';
 import usePrices from '../hooks/usePrices';
 import { Copy, Flame } from "lucide-react";
 // Komponen harga USDC dan indikator tren
@@ -43,16 +44,23 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
   }
+  const { publicKey } = useWallet();
 
   // Enrich token metadata on mount so UI shows symbol/name/logo quickly
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        if (!token.logoURI || !token.name || !token.symbol) {
+        // Always ensure `token.meta` exists (and includes `dev`) so UI and other
+        // components can rely on the same shape. Only fetch when missing or when
+        // dev field isn't present.
+        const needsMeta = !(token as any).meta || !((token as any).meta?.dev);
+        if (needsMeta || !token.logoURI || !token.name || !token.symbol) {
           const { fetchTokenMetadata } = await import('../lib/solanaMetadata');
           const meta = await fetchTokenMetadata(token.mintAddress ?? token.mint);
           if (!cancelled && meta) {
+            // attach raw meta so UI and logic can inspect meta.dev
+            try { (token as any).meta = meta; } catch (e) {}
             if (!token.logoURI && meta.logoURI) token.logoURI = meta.logoURI;
             if ((!token.name || token.name === token.mintAddress) && meta.name) token.name = meta.name;
             if ((!token.symbol) && meta.symbol) token.symbol = meta.symbol;
@@ -83,7 +91,21 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
             )}
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-foreground tracking-tight">{token.symbol ?? token.name ?? 'SPL'}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-3xl font-bold text-foreground tracking-tight">{token.symbol ?? token.name ?? 'SPL'}</h2>
+              {/* Developer badge when token metadata indicates this wallet is the dev (inline with symbol) */}
+              {(() => {
+                try {
+                  const pk = publicKey?.toBase58?.();
+                  const meta = token?.meta ?? token?.metadata ?? null;
+                  const devField = meta?.dev ?? null;
+                  if (devField && pk && String(devField).trim() === pk) {
+                    return <span className="text-xs bg-green-600/10 text-green-400 px-2 py-0.5 rounded-full">Developer</span>;
+                  }
+                } catch (e) {}
+                return null;
+              })()}
+            </div>
             <p className="text-sm text-muted-foreground font-medium">{token.name ?? token.mintAddress}</p>
           </div>
         </div>

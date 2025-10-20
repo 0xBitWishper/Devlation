@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { ArrowLeft, Calendar, Flame, ExternalLink } from "lucide-react"
 
 interface BurnRecord {
@@ -10,6 +11,7 @@ interface BurnRecord {
   txSignature: string
   timestamp: number
   icon: string
+  status?: string
 }
 
 interface BurnHistoryProps {
@@ -18,6 +20,8 @@ interface BurnHistoryProps {
 }
 
 export function BurnHistory({ records, onBack }: BurnHistoryProps) {
+  const [copied, setCopied] = useState<string | null>(null);
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString("en-US", {
       month: "short",
@@ -29,7 +33,16 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
   }
 
   const formatTxSignature = (sig: string) => {
-    return `${sig.slice(0, 8)}...${sig.slice(-8)}`
+    if (!sig) return '-';
+    return `${sig.slice(0, 6)}...${sig.slice(-6)}`
+  }
+
+  const copy = async (val: string) => {
+    try {
+      await navigator.clipboard.writeText(val);
+      setCopied(val);
+      setTimeout(() => setCopied((c) => (c === val ? null : c)), 2000);
+    } catch (e) {}
   }
 
   return (
@@ -78,38 +91,55 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
                 style={{ backgroundColor: "rgba(255, 255, 255, 0.05)" }}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
                     {/* Token Icon */}
-                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center text-xl border border-accent/20">
-                      {record.icon}
+                    <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center text-xl border border-accent/20 overflow-hidden">
+                      {record.icon && (typeof record.icon === 'string') && (record.icon.startsWith('http') || record.icon.startsWith('data:')) ? (
+                        // render as image when icon is a URL or data URI
+                        <img src={record.icon} alt={record.tokenSymbol || 'icon'} title={record.tokenSymbol ?? ''} loading="lazy" className="w-full h-full object-contain" />
+                      ) : (
+                        // fallback: render raw text (emoji or short label)
+                        <div className="text-lg font-semibold">{record.icon ?? record.tokenSymbol?.[0] ?? '🔸'}</div>
+                      )}
                     </div>
 
                     {/* Token Info */}
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-semibold text-foreground">{record.tokenSymbol}</p>
-                        <span className="text-xs text-muted-foreground">({record.tokenName})</span>
+                        <p title={record.tokenSymbol} className="font-semibold text-foreground truncate max-w-[60%]">{record.tokenSymbol}</p>
+                        <span title={record.tokenName} className="text-xs text-muted-foreground truncate max-w-[40%]">({record.tokenName})</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Calendar className="w-3 h-3" />
-                        {formatDate(record.timestamp)}
+                        <span className="truncate">{formatDate(record.timestamp)}</span>
                       </div>
                     </div>
 
                     {/* Amount */}
-                    <div className="text-right">
+                    <div className="w-28 text-right flex-shrink-0">
                       <p className="font-semibold text-foreground">{record.amount.toLocaleString()}</p>
                       <p className="text-xs text-muted-foreground">{record.tokenSymbol}</p>
                     </div>
 
-                    {/* TX Signature */}
-                    <div className="text-right hidden sm:block">
-                      <p className="font-mono text-xs text-accent mb-1">{formatTxSignature(record.txSignature)}</p>
-                      <button className="text-xs text-muted-foreground hover:text-foreground smooth-transition flex items-center gap-1">
-                        <ExternalLink className="w-3 h-3" />
-                        View
-                      </button>
-                    </div>
+                    {/* Placeholder to keep spacing */}
+                    
+                    <div style={{ width: 8 }} />
+
+                    {/* TX/Status Column moved to right */}
+                    <div className="hidden sm:flex flex-col items-end gap-2 w-56 flex-shrink-0">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs font-semibold ${record.status === 'confirmed' ? 'text-green-400' : record.status === 'failed' ? 'text-red-400' : 'text-yellow-300'}`}>{(record.status || 'pending').toUpperCase()}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                          <p title={record.txSignature} className="font-mono text-xs text-accent mb-0">{formatTxSignature(record.txSignature)}</p>
+                          <button onClick={() => copy(record.txSignature)} className="text-xs px-2 py-1 rounded bg-[#9945FF]/10 hover:bg-[#9945FF]/20 transition text-[#9945FF]">
+                            {copied === record.txSignature ? 'Copied' : 'Copy'}
+                          </button>
+                          <a href={`https://solscan.io/tx/${record.txSignature}`} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground smooth-transition flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                                </div>
+                              </div>
                   </div>
                 </div>
               </div>

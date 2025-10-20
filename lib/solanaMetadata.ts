@@ -26,6 +26,8 @@ export interface TokenMeta {
   price?: number | null;
   /** decimals bila tersedia */
   decimals?: number | null;
+  /** Optional developer field extracted from metadata sources (may be string or object) */
+  dev?: any;
 }
 
 /** Cache sederhana – mencegah request berulang ke jaringan */
@@ -96,7 +98,36 @@ export async function fetchJupiterTokenData(mintOrSymbol: string) {
     const symbol = found?.symbol || found?.ticker || null;
     const usdPrice = found?.usdPrice ?? found?.price ?? found?.priceUsd ?? found?.price_usd ?? null;
     const decimals = found?.decimals ?? found?.dec ?? null;
-    return { id, name, symbol, logoURI: logo, usdPrice, decimals };
+    // Jupiter may expose custom fields like `dev` or similar — preserve if present
+    // tolerant dev extraction: Jupiter shapes vary, accept several keys and nested forms
+    function extractDev(obj: any): any {
+      if (!obj) return null;
+      const candidates = [
+        obj.dev,
+        obj.developer,
+        obj.dev_gunakan,
+        obj['dev.gunakan'],
+        obj.meta?.dev,
+        obj.metadata?.dev,
+        obj.data?.dev,
+        obj.attributes?.dev,
+      ];
+      for (const c of candidates) if (c) return c;
+      // also scan for nested keys that look like dev
+      try {
+        for (const k of Object.keys(obj || {})) {
+          if (k && typeof k === 'string' && k.toLowerCase().includes('dev')) {
+            const v = (obj as any)[k];
+            if (v) return v;
+          }
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    const rawDev = extractDev(found);
+    const dev = rawDev ? (typeof rawDev === 'string' ? rawDev.trim() : String(rawDev).trim()) : null;
+    return { id, name, symbol, logoURI: logo, usdPrice, decimals, dev };
   } catch (e) {
     return null;
   }
@@ -182,13 +213,13 @@ function normalizeUri(uri: string) {
  */
 async function fetchFromTokenList(
   mintStr: string
-): Promise<{ name?: string; symbol?: string; logoURI?: string } | null> {
+): Promise<{ name?: string; symbol?: string; logoURI?: string; dev?: any } | null> {
   try {
     // Use Jupiter-lite token search as single source of truth
     const j = await fetchJupiterTokenData(mintStr);
     if (!j) return null;
     // Map to the legacy shape used by callers
-    return { name: j.name ?? undefined, symbol: j.symbol ?? undefined, logoURI: j.logoURI ?? undefined };
+    return { name: j.name ?? undefined, symbol: j.symbol ?? undefined, logoURI: j.logoURI ?? undefined, dev: (j as any)?.dev ?? (j as any)?.developer ?? undefined } as any;
   } catch (e) {
     console.warn('[meta] gagal fetch token‑list:', e);
     return null;
@@ -226,6 +257,7 @@ export async function fetchTokenMetadata(
         uri: null,
         logoURI: j.logoURI ?? null,
         price: typeof j.usdPrice === 'number' ? j.usdPrice : null,
+        dev: (j as any)?.dev ?? (j as any)?.developer ?? null,
         decimals: typeof j.decimals === 'number' ? j.decimals : undefined,
       };
       metaCache.set(mintAddress, result);
@@ -254,17 +286,26 @@ export async function fetchTokenMetadata(
 
       if (!logoURI && uri) {
         const candidates = normalizeUri(uri);
+        let devVal: any = null;
         for (const u of candidates) {
           try {
             const metaResp = await fetch(u);
             if (!metaResp.ok) continue;
             const metaJson = await metaResp.json();
             logoURI = metaJson.image ?? metaJson.image_url ?? null;
+            // capture developer-related fields if available in on-chain JSON
+            const devFromJson = metaJson.dev ?? metaJson['dev.gunakan'] ?? metaJson.developer ?? null;
+            if (devFromJson) {
+              devVal = devFromJson;
+            }
             if (logoURI) break;
+            if (devVal) break;
           } catch (e) {
             // try next
           }
         }
+        // attach captured devVal to be used when building the result below
+        (metaCache as any).__lastDevTemp = devVal;
       }
 
       const result: TokenMeta = {
@@ -273,7 +314,23 @@ export async function fetchTokenMetadata(
         symbol,
         uri,
         logoURI,
+        // no strong dev signal from Jupiter or on-chain at this path here, keep undefined
       };
+      // restore any captured devVal
+      try {
+        const last = (metaCache as any).__lastDevTemp;
+        if (last) (result as any).dev = last;
+        delete (metaCache as any).__lastDevTemp;
+      } catch (e) {}
+      // If the token-list has an entry with developer field, use that
+      try {
+        const tl = await ensureTokenListLoaded();
+        const listEntry = tl?.[mintAddress];
+        if (listEntry) {
+          const devField = listEntry?.dev ?? listEntry?.developer ?? null;
+          if (devField) (result as any).dev = devField;
+        }
+      } catch (e) {}
       metaCache.set(mintAddress, result);
       return result;
     } catch (e) {
@@ -291,6 +348,7 @@ export async function fetchTokenMetadata(
       symbol: listInfo.symbol ?? null,
       uri: null,
       logoURI: listInfo.logoURI ?? null,
+      dev: (listInfo as any)?.dev ?? (listInfo as any)?.developer ?? null,
     };
     metaCache.set(mintAddress, result);
     return result;
@@ -353,6 +411,11 @@ export async function fetchMultipleMetadata(
           uri: null,
           logoURI: j.logoURI ?? null,
           price: typeof j.usdPrice === 'number' ? j.usdPrice : null,
+          dev: ((): string | null => {
+            const r = (j as any)?.dev ?? (j as any)?.developer ?? null;
+            if (!r) return null;
+            return typeof r === 'string' ? r.trim() : String(r).trim();
+          })(),
           decimals: typeof j.decimals === 'number' ? j.decimals : undefined,
         };
         metaCache.set(mint, meta);
@@ -414,7 +477,23 @@ export async function fetchMultipleMetadata(
             } catch (_) {}
           }
 
-          const meta: TokenMeta = { mint, name, symbol, uri, logoURI };
+          // attempt to fetch on-chain JSON to extract potential `dev` field
+          let devVal: any = null;
+          if (uri) {
+            try {
+              const candidates = normalizeUri(uri);
+              for (const u of candidates) {
+                try {
+                  const resp = await fetch(u);
+                  if (!resp.ok) continue;
+                  const json = await resp.json();
+                  devVal = json.dev ?? json['dev.gunakan'] ?? json.developer ?? devVal;
+                  if (devVal) break;
+                } catch (_) {}
+              }
+            } catch (_) {}
+          }
+          const meta: TokenMeta = { mint, name, symbol, uri, logoURI, dev: devVal };
           metaCache.set(mint, meta);
           result[mint] = meta;
           continue;
@@ -424,7 +503,7 @@ export async function fetchMultipleMetadata(
       // Fallback token‑list (if on‑chain not present)
       const listInfo = await fetchFromTokenList(mint);
       if (listInfo) {
-        const meta: TokenMeta = { mint, name: listInfo.name ?? null, symbol: listInfo.symbol ?? null, uri: null, logoURI: listInfo.logoURI ?? null };
+        const meta: TokenMeta = { mint, name: listInfo.name ?? null, symbol: listInfo.symbol ?? null, uri: null, logoURI: listInfo.logoURI ?? null, dev: (listInfo as any)?.dev ?? (listInfo as any)?.developer ?? null };
         metaCache.set(mint, meta);
         result[mint] = meta;
       } else {
@@ -556,5 +635,6 @@ export async function fetchTokenMetadataFromJupiter(mint: string) {
     logoURI: j.logoURI ?? null,
     price: typeof j.usdPrice === 'number' ? j.usdPrice : null,
     decimals: typeof j.decimals === 'number' ? j.decimals : null,
+    dev: j.dev ?? null,
   } as TokenMeta;
 }
