@@ -20,7 +20,7 @@ function CopyNotificationWrapper() {
   }, []);
   return show ? (
     <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50">
-      <div className="px-4 py-2 rounded-lg bg-accent text-background font-semibold shadow-lg animate-fade-in">
+  <div className="px-4 py-2 rounded-lg bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)] text-background font-semibold shadow-lg animate-fade-in">
         Address copied!
       </div>
     </div>
@@ -31,11 +31,11 @@ function CopyableAddress() {
   const address = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump';
   return (
     <div className="flex-1 flex items-center gap-2 bg-background/70 border border-border/40 rounded-lg px-3 py-2">
-      <span className="font-mono text-xs sm:text-sm text-accent break-all select-all">
+  <span className="font-mono text-xs sm:text-sm text-[#9945FF] break-all select-all">
         {address}
       </span>
       <button
-        className="ml-2 p-2 rounded hover:bg-accent/20 text-accent transition flex items-center justify-center"
+  className="ml-2 p-2 rounded hover:bg-[#9945FF]/20 text-[#9945FF] transition flex items-center justify-center"
         onClick={() => {
           navigator.clipboard.writeText(address);
           if (typeof window !== 'undefined' && (window as any).showCopyNotif) (window as any).showCopyNotif();
@@ -88,9 +88,9 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
   <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95 overflow-hidden flex flex-col">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 right-10 w-72 h-72 bg-accent/5 rounded-full blur-3xl animate-pulse" />
+  <div className="absolute top-20 right-10 w-72 h-72 bg-[#9945FF]/10 rounded-full blur-3xl animate-pulse" />
         <div
-          className="absolute bottom-20 left-10 w-96 h-96 bg-accent/3 rounded-full blur-3xl animate-pulse"
+          className="absolute bottom-20 left-10 w-96 h-96 bg-[#14F195]/10 rounded-full blur-3xl animate-pulse"
           style={{ animationDelay: "1s" }}
         />
       </div>
@@ -107,7 +107,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
             {connected && (
               <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg backdrop-blur-xl border border-white/10" style={{ backgroundColor: "rgba(255, 255, 255, 0.03)" }}>
                 <span className="text-xs text-muted-foreground font-medium">Connected:</span>
-                <span className="font-mono text-sm text-accent font-semibold">
+                <span className="font-mono text-sm text-[#9945FF] font-semibold">
                   {publicKey ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}` : "-"}
                 </span>
                 <span className="text-xs text-muted-foreground">|</span>
@@ -137,8 +137,8 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               {/* Features */}
               <div className="space-y-4">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 mt-1">
-                    <Zap className="w-6 h-6 text-accent" />
+                  <div className="w-12 h-12 rounded-lg bg-[#9945FF]/10 border-2 border-[#9945FF] flex items-center justify-center flex-shrink-0 mt-1">
+                    <Zap className="w-6 h-6 text-[#9945FF]" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground mb-1">Instant Burning</h3>
@@ -147,8 +147,8 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                 </div>
 
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 mt-1">
-                    <Shield className="w-6 h-6 text-accent" />
+                  <div className="w-12 h-12 rounded-lg bg-[#9945FF]/10 border-2 border-[#9945FF] flex items-center justify-center flex-shrink-0 mt-1">
+                    <Shield className="w-6 h-6 text-[#9945FF]" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground mb-1">Secure & Safe</h3>
@@ -157,8 +157,8 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                 </div>
 
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center flex-shrink-0 mt-1">
-                    <Flame className="w-6 h-6 text-accent" />
+                  <div className="w-12 h-12 rounded-lg bg-[#9945FF]/10 border-2 border-[#9945FF] flex items-center justify-center flex-shrink-0 mt-1">
+                    <Flame className="w-6 h-6 text-[#9945FF]" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground mb-1">Permanent Removal</h3>
@@ -172,7 +172,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                 {connected ? (
                   <button
                     onClick={handleGetStarted}
-                    className="group px-8 py-4 rounded-lg bg-gradient-to-r from-accent to-accent/80 text-background font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-accent/20 transition-all duration-300 w-full sm:w-auto justify-center"
+                    className="group px-8 py-4 rounded-lg bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)] text-background font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-[#9945FF]/20 transition-all duration-300 w-full sm:w-auto justify-center"
                   >
                     Get Started
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -180,7 +180,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                 ) : (
                   <button
                     onClick={handleConnect}
-                    className="group px-8 py-4 rounded-lg bg-gradient-to-r from-accent to-accent/80 text-background font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-accent/20 transition-all duration-300 w-full sm:w-auto justify-center"
+                    className="group px-8 py-4 rounded-lg bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)] text-background font-semibold flex items-center gap-2 hover:shadow-lg hover:shadow-[#9945FF]/20 transition-all duration-300 w-full sm:w-auto justify-center"
                   >
                     Connect Wallet
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -357,6 +357,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                 <ul className="mt-2 space-y-2">
                   <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-accent mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>VIP Signal System (premium analytics &amp; dev insights)</li>
                   <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-accent mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Community integration with X / Telegram</li>
+                  <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-accent mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>API For Develeopers</li>
                   <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-accent mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Further ecosystem utilities</li>
                 </ul>
               </div>
@@ -403,7 +404,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
       <footer className="w-full border-t border-border/30 bg-background/80 backdrop-blur-xl py-8 mt-10">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <img src="/devlation.svg" alt="Devlation Logo" className="h-6 w-auto" />
+            <img src="/devlation.png" alt="Devlation Logo" className="h-6 w-auto" />
             <span>© {new Date().getFullYear()} Devlation. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-4">

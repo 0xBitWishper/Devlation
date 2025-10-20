@@ -78,12 +78,13 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
 
   return (
     <div
-      className="rounded-xl backdrop-blur-xl border border-white/10 border-border/40 p-8 space-y-6"
-      style={{ backgroundColor: "rgba(255, 255, 255, 0.05)" }}
+      className="rounded-xl backdrop-blur-xl border-2 border-[#9945FF] p-8 space-y-6 shadow-2xl"
+      style={{ background: "rgba(20, 20, 30, 0.45)", boxShadow: "0 8px 32px 0 rgba(153,69,255,0.25)", border: "2px solid #9945FF" }}
+  // ...existing code...
     >
-      <div className="flex items-start justify-between pb-6 border-b border-border/30">
+  <div className="flex items-start justify-between pb-6 border-b-2 border-[#9945FF]">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center text-4xl border border-accent/20 overflow-hidden">
+          <div className="w-16 h-16 rounded-xl bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)]/20 flex items-center justify-center text-4xl border-2 border-[#9945FF] overflow-hidden">
             {token.logoURI ? (
               <img src={token.logoURI} alt={token.symbol} className="w-full h-full object-contain" />
             ) : (
@@ -99,11 +100,11 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
 
       {/* Token Info Grid */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="p-4 rounded-lg bg-card/30 border border-border/40">
+  <div className="p-4 rounded-lg bg-card/30 border-2 border-[#9945FF]">
           <p className="text-xs text-muted-foreground mb-2 font-medium">Balance</p>
           <p className="text-2xl font-bold text-foreground">{token.balance.toLocaleString()}</p>
         </div>
-        <div className="p-4 rounded-lg bg-card/30 border border-border/40">
+  <div className="p-4 rounded-lg bg-card/30 border-2 border-[#9945FF]">
           <p className="text-xs text-muted-foreground mb-2 font-medium">Price (USDC)</p>
           <TokenUSDCDetail token={token} />
         </div>
@@ -112,11 +113,11 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
       {/* Mint Address */}
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground font-medium">Mint Address</p>
-        <div className="flex items-center gap-2 p-4 rounded-lg bg-card/30 border border-border/40">
+  <div className="flex items-center gap-2 p-4 rounded-lg bg-card/30 border-2 border-[#9945FF]">
           <code className="flex-1 text-xs font-mono text-foreground break-all">{token.mintAddress}</code>
           <button
             onClick={() => copyToClipboard(token.mintAddress)}
-            className="p-2 hover:bg-accent/20 rounded-lg smooth-transition flex-shrink-0 text-accent"
+            className="p-2 hover:bg-[#9945FF]/20 rounded-lg smooth-transition flex-shrink-0 text-[#9945FF]"
             title="Copy address"
           >
             <Copy className="w-4 h-4" />
@@ -127,10 +128,10 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
       {/* Burn Button */}
       <button
         onClick={() => onBurnClick(token)}
-        className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-accent to-accent/80 text-accent-foreground font-semibold flex items-center justify-center gap-2 hover:from-accent/90 hover:to-accent/70 smooth-transition shadow-lg shadow-accent/20"
+        className="w-full py-3 px-4 rounded-lg bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)] text-white font-semibold flex items-center justify-center gap-2 hover:opacity-90 smooth-transition shadow-lg"
       >
         <Flame className="w-5 h-5" />
-        Burn {token.symbol}
+        Edit Amount to Burn
       </button>
 
       {/* Info Box */}

@@ -74,12 +74,14 @@ export function TokenList({ tokens, selectedToken, onSelectToken }: TokenListPro
         <button
           key={token.id}
           onClick={() => onSelectToken(token)}
-          className={`w-full p-4 rounded-xl border smooth-transition flex items-center gap-3 ${
-            selectedToken?.id === token.id
-              ? "backdrop-blur-xl border-accent/40 bg-accent/8"
-              : "backdrop-blur-xl border-border/40"
-          }`}
-          style={selectedToken?.id !== token.id ? { backgroundColor: "rgba(255, 255, 255, 0.03)" } : undefined}
+          className={`w-full p-4 rounded-xl border smooth-transition flex items-center gap-3 backdrop-blur-xl ${selectedToken?.id === token.id ? '' : 'border-border/40'}`}
+          style={selectedToken?.id === token.id
+            ? {
+                background: "linear-gradient(90deg, rgba(153,69,255,0.18) 0%, rgba(20,241,149,0.18) 100%)",
+                border: "2px solid #9945FF"
+              }
+            : { backgroundColor: "rgba(255, 255, 255, 0.03)" }
+          }
         >
           <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center text-lg flex-shrink-0 border border-accent/20 overflow-hidden">
             {token.logoURI ? (

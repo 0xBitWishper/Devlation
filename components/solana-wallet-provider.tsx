@@ -8,7 +8,10 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 
 export const SolanaWalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
   // Ambil endpoint dari environment variable
-  const endpoint = process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT || "https://api.mainnet-beta.solana.com";
+  // Jika ada txMode di window, pakai endpoint TX
+  const endpoint = (typeof window !== 'undefined' && (window as any).txMode)
+    ? process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT_TX || "https://rpc.hellomoon.io"
+    : process.env.NEXT_PUBLIC_SOLANA_RPC_ENDPOINT || "https://api.mainnet-beta.solana.com";
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
