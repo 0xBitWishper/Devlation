@@ -1,0 +1,43 @@
+name: Auto Create PR Dev to Main (with build check)
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build-and-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Create Pull Request to main
+        if: success()
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: dev
+          title: "Auto PR: Merge dev → main"
+          body: |
+            🚀 Build success!  
+            This PR was automatically created after a successful build on branch `dev`.
+
+            Please review before merging to `main` (Vercel will auto-deploy after merge).
