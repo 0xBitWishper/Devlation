@@ -3,9 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useToast } from "../hooks/use-toast"
 import { BurnModal } from "./burn-modal"
-import { TokenManageModal } from "./token-manage-modal"
 import { Search, Filter, Flame, Home } from "lucide-react"
-import { Settings } from "lucide-react"
 import {
   Select,
   SelectTrigger,
@@ -508,7 +506,7 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
   const logoURI = token.logoURI ?? token.logo ?? meta.logoURI ?? meta.logo ?? fallbackLogo;
   const balance = token.amount ?? token.balance ?? 0;
   const decimals = token.decimals ?? meta.decimals ?? 0;
-  const symbol = token.symbol ?? meta.symbol ?? (decimals === 0 ? 'NFT' : undefined);
+  let symbol = token.symbol ?? meta.symbol ?? (decimals === 0 ? 'NFT' : undefined);
   const name = token.name ?? meta.name ?? mint;
 
       return {
@@ -525,19 +523,6 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
       };
     })
   ];
-
-    // Build token list for manage modal (must be after tokens is assigned)
-    const manageTokens = tokens.map(t => ({
-      symbol: t.symbol,
-      name: t.name,
-      logoURI: t.logoURI,
-      mintAddress: t.mintAddress,
-      visible: tokenVisibility[t.symbol] !== false // default true
-    }));
-
-    const handleToggleToken = (symbol: string) => {
-      setTokenVisibility(prev => ({ ...prev, [symbol]: !(prev[symbol] !== false) }));
-    };
 
   // Debug log tokensOwned dan tokens
   if (typeof window !== 'undefined') {
@@ -798,7 +783,6 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
     }
     burnToken();
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
       {/* Transaction status banner */}
@@ -826,50 +810,63 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
         />
       )}
       <header className="border-b border-border/40 backdrop-blur-xl sticky top-0 z-40 bg-background/80">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+  <div className="max-w-7xl mx-auto px-6 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-16 flex items-center justify-center">
-              <img src="/devflation.png" alt="Devflation Logo" className="h-10 w-auto max-w-xs object-contain" />
+            {/* Home button removed as requested */}
+            <button
+              onClick={() => router.push("/")}
+              className="w-4 h-4 sm:w-5 sm:h-5 rounded bg-[linear-gradient(90deg,#9945FF_0%,#14F195_100%)]/30 flex items-center justify-center border border-[#9945FF] focus:outline-none"
+              title="Go to Landing Page"
+            >
+              <Flame className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-[#9945FF]" />
+            </button>
+            <img
+              src="/devflation.png"
+              alt="Devflation Logo"
+              className="h-4 w-auto sm:h-5 ml-1"
+              style={{ maxWidth: '60px', objectFit: 'contain' }}
+            />
+            <div>
+              <h1 className="text-[10px] sm:text-xs font-semibold text-foreground tracking-tight">Devlation</h1>
+              <p className="text-[7px] sm:text-[8px] text-muted-foreground leading-tight">Burn Any Tokens on Solana Network</p>
             </div>
           </div>
-          {!isMobile && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push("/burn-history")}
-                className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
-              >
-                History
-              </button>
-              <button
-                onClick={() => router.push("/public-burn-history")}
-                className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
-              >
-                Public
-              </button>
-              <button
-                onClick={() => router.push("/reward")}
-                className="px-4 py-2.5 rounded-lg border border-[#14F195] text-[#14F195] font-medium hover:bg-[#14F195]/10 smooth-transition text-sm"
-              >
-                Reward
-              </button>
-              <div
-                className="flex items-center gap-3 px-4 py-2.5 rounded-lg backdrop-blur-xl border border-white/10"
-                style={{ backgroundColor: "rgba(255, 255, 255, 0.03)" }}
-              >
-                <span className="text-xs text-muted-foreground font-medium">Connected:</span>
-                <span className="font-mono text-sm text-[#9945FF] font-semibold">
-                  {publicKey ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}` : "-"}
-                </span>
-                <span className="text-xs text-muted-foreground">|</span>
-                <span className="text-sm font-medium">
-                  ◎ {balanceError ? <span className="text-red-500">{balanceError}</span> : solBalance === null && publicKey ? <span className="animate-pulse">Loading...</span> : (solBalance !== null && !isNaN(solBalance)) ? parseFloat(solBalance.toString()).toFixed(6) : "-"} SOL
-                </span>
-              </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/burn-history")}
+              className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
+            >
+              History
+            </button>
+            <button
+              onClick={() => router.push("/public-burn-history")}
+              className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
+            >
+              Public
+            </button>
+            <button
+              onClick={() => router.push("/reward")}
+              className="px-4 py-2.5 rounded-lg border border-[#14F195] text-[#14F195] font-medium hover:bg-[#14F195]/10 smooth-transition text-sm"
+            >
+              Reward
+            </button>
+            <div
+              className="flex items-center gap-3 px-4 py-2.5 rounded-lg backdrop-blur-xl border border-white/10"
+              style={{ backgroundColor: "rgba(255, 255, 255, 0.03)" }}
+            >
+              <span className="text-xs text-muted-foreground font-medium">Connected:</span>
+              <span className="font-mono text-sm text-[#9945FF] font-semibold">
+                {publicKey ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}` : "-"}
+              </span>
+              <span className="text-xs text-muted-foreground">|</span>
+              <span className="text-sm font-medium">
+                ◎ {balanceError ? <span className="text-red-500">{balanceError}</span> : solBalance === null && publicKey ? <span className="animate-pulse">Loading...</span> : (solBalance !== null && !isNaN(solBalance)) ? parseFloat(solBalance.toString()).toFixed(6) : "-"} SOL
+              </span>
             </div>
-          )}
+          </div>
         </div>
       </header>
-
+      {/* Debug panel removed to avoid layout disruption */}
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* ...existing grid/token UI... */}
@@ -878,50 +875,18 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           <div className="lg:col-span-1">
             <div className="space-y-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9945FF]" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search tokens..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-card/40 text-foreground placeholder:text-muted-foreground focus:outline-none smooth-transition border-2 border-[#9945FF] rounded-xl"
-                  style={{ backgroundColor: "rgba(20, 20, 30, 0.18)" }}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card/40 text-foreground placeholder:text-muted-foreground focus:outline-none smooth-transition"
+                  style={{ backgroundColor: "rgba(20, 20, 30, 0.18)", borderRadius: '0.75rem', boxShadow: '0 0 0 2px #9945FF' }}
                 />
               </div>
               {/* Filter */}
-              <div className="flex items-center gap-2">
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-full min-w-[140px] bg-card/40 border-2 border-[#9945FF] focus:ring-[#9945FF]/40 focus:border-[#9945FF]/40 text-foreground rounded-lg shadow-sm flex items-center gap-2">
-                    <span className="flex items-center">
-                      <Filter className="w-4 h-4 text-[#9945FF] mr-2" />
-                      <SelectValue />
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="bg-card/90 border-2 border-[#9945FF]/30 text-foreground rounded-lg shadow-lg">
-                    <SelectItem value="all">Filter: All</SelectItem>
-                    <SelectItem value="burnable">Burnable</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {/* Manage Tokens Button */}
-              <button
-                type="button"
-                className="w-full mt-3 py-2 rounded-lg border-2 border-[#9945FF] text-[#9945FF] font-semibold bg-card/40 hover:bg-[#9945FF]/10 transition flex items-center justify-center gap-2"
-                onClick={() => setShowManageModal(true)}
-              >
-                <Settings className="w-5 h-5" />
-                Manage Tokens
-              </button>
-              {/* Token List */}
-              <TokenList tokens={filteredTokens.filter(t => tokenVisibility[t.symbol] !== false)} selectedToken={selectedToken} onSelectToken={setSelectedToken} />
-      {showManageModal && (
-        <TokenManageModal
-          tokens={manageTokens}
-          onClose={() => setShowManageModal(false)}
-          onToggle={handleToggleToken}
-        />
-      )}
-
+              <TokenList tokens={filteredTokens} selectedToken={selectedToken} onSelectToken={setSelectedToken} />
             </div>
           </div>
           {/* Right Column - Token Detail */}

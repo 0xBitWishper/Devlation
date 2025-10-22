@@ -1,3 +1,11 @@
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.7; filter: blur(32px); }
+  50% { opacity: 1; filter: blur(16px); }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3.5s ease-in-out infinite;
+}
 @import "tailwindcss";
 @import "tw-animate-css";
 

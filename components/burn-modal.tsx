@@ -14,13 +14,14 @@ interface BurnModalProps {
   isDev?: boolean
 }
 
-export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
+export function BurnModal({ token, onConfirm, onCancel, isDev }: BurnModalProps) {
   const [amount, setAmount] = useState("")
   const [isChecked, setIsChecked] = useState(false)
   const [method, setMethod] = useState<'instruction' | 'send'>('instruction')
   const [copied, setCopied] = useState(false)
   const [metaReady, setMetaReady] = useState<boolean>(Boolean((token as any)?.meta));
   const toast = useToast();
+  const { publicKey } = useWallet();
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -104,8 +105,14 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
       });
       return;
     }
+<<<<<<< Updated upstream
     const amt = amount ? Number.parseFloat(amount) : 0;
     onConfirm(amt, method);
+=======
+    if (amount) {
+      onConfirm(Number.parseFloat(amount));
+    }
+>>>>>>> Stashed changes
   }
 
   return (
