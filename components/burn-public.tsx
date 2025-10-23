@@ -2,6 +2,8 @@
 
 
 import { BurnRecord } from "../types/burn"
+import { useState } from "react"
+import { ArrowLeft, Calendar, ExternalLink } from "lucide-react"
 
 interface BurnHistoryProps {
   records: BurnRecord[]
