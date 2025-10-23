@@ -5,6 +5,7 @@ import "./globals.css";
 
 import { SolanaWalletProvider } from "../components/solana-wallet-provider"
 import { ThemeProvider } from "../components/theme-provider"
+import { Toaster } from "../components/ui/toaster"
 import { Outfit } from "next/font/google"
 
 const outfit = Outfit({
@@ -26,6 +27,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <SolanaWalletProvider>
             {children}
+            <Toaster />
           </SolanaWalletProvider>
         </ThemeProvider>
       </body>
