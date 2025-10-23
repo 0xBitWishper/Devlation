@@ -140,8 +140,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     return res.status(200).json({ tokens });
   } catch (error) {
-    // Log error detail ke console untuk debugging
+    // Log error detail for debugging (keep details server-side only)
     console.error('Solana token API error:', error);
-    return res.status(500).json({ error: 'RPC request failed', details: error });
+    // Return a well-formed, safe response to the client to avoid 500s and
+    // allow the client to gracefully treat it as "no tokens" or fallback.
+    try {
+      return res.status(200).json({ tokens: [] });
+    } catch (e) {
+      // In the unlikely event JSON serialization fails, fallback to a minimal
+      // plain-text response while ensuring we don't return a 500 error code.
+      console.error('Failed to send sanitized token response:', e);
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 200;
+      res.end(JSON.stringify({ tokens: [] }));
+      return;
+    }
   }
 }

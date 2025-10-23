@@ -40,7 +40,7 @@ export default function Home() {
     setCurrentScreen("burn")
   }
 
-  const handleConfirmBurn = (amount: number) => {
+  const handleConfirmBurn = (amount: number, method?: 'instruction' | 'send', image?: string) => {
     if (selectedToken) {
       const newRecord: BurnRecord = {
         id: Date.now().toString(),
@@ -49,7 +49,7 @@ export default function Home() {
         amount: amount,
         txSignature: "5Rk7CwkY2mP9nQ3xL8vH4jK6bN2mP5qR8sT1uV4wX7yZ9aB",
         timestamp: Date.now(),
-        icon: selectedToken.icon,
+        icon: image ?? selectedToken.icon,
       }
       setBurnHistory([newRecord, ...burnHistory])
     }

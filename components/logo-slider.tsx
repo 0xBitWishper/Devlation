@@ -1,6 +1,6 @@
 import React from "react";
 
-// Logo list, ganti src sesuai logo yang tersedia di /public
+// Logo list, change src to match logos available in /public
 const logos = [
   { src: "/devlation.png", alt: "Devlation" },
   { src: "/devlation_circle.png", alt: "Devlation Circle" },
