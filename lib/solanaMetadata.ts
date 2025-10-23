@@ -10,21 +10,21 @@ const METAPLEX_PROGRAM_ID_STR =
   "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
 const METAPLEX_PROGRAM_ID = new PublicKey(METAPLEX_PROGRAM_ID_STR);
 
-/** Struktur data yang akan dikembalikan ke pemanggil */
+/** Data structure returned to callers */
 export interface TokenMeta {
-  /** Mint address dalam bentuk string (base58) */
+  /** Mint address as a string (base58) */
   mint: string;
-  /** Nama token (null bila tidak tersedia) */
+  /** Token name (null if unavailable) */
   name: string | null;
-  /** Simbol token (null bila tidak tersedia) */
+  /** Token symbol (null if unavailable) */
   symbol: string | null;
-  /** URI metadata yang biasanya menunjuk ke file JSON di Arweave / IPFS */
+  /** Metadata URI, usually points to JSON on Arweave / IPFS */
   uri: string | null;
-  /** URL gambar (logo) – di‑extract dari file JSON di atas (bisa null). */
+  /** Image URL (logo) - extracted from the JSON above (may be null). */
   logoURI?: string | null;
-  /** harga USD, bila tersedia dari sumber (Jupiter) */
+  /** USD price when available from sources (Jupiter) */
   price?: number | null;
-  /** decimals bila tersedia */
+  /** decimals when available */
   decimals?: number | null;
   /** Optional developer field extracted from metadata sources (may be string or object) */
   dev?: any;
@@ -221,20 +221,20 @@ async function fetchFromTokenList(
     // Map to the legacy shape used by callers
     return { name: j.name ?? undefined, symbol: j.symbol ?? undefined, logoURI: j.logoURI ?? undefined, dev: (j as any)?.dev ?? (j as any)?.developer ?? undefined } as any;
   } catch (e) {
-    console.warn('[meta] gagal fetch token‑list:', e);
+    console.warn('[meta] failed to fetch token-list:', e);
     return null;
   }
 }
 
 /**
  * -------------------------------------------------------------------------
- * 3️⃣  Core: ambil metadata satu‑mint
+ * 3️⃣  Core: fetch metadata for a single mint
  * -------------------------------------------------------------------------
  */
 export async function fetchTokenMetadata(
   /** Mint address dalam string (base58) */
   mintAddress: string,
-  /** Opsional: koneksi RPC custom (default = mainnet‑beta) */
+  /** Optional: custom RPC connection (default = mainnet-beta) */
   connection?: Connection
 ): Promise<TokenMeta | null> {
   // --------- cache ----------
@@ -265,14 +265,14 @@ export async function fetchTokenMetadata(
     }
   } catch (_) {}
 
-  // --------- coba baca akun metadata on‑chain ----------
+  // --------- try reading on-chain metadata account ----------
   const accountInfo = await conn.getAccountInfo(metaPda);
   if (accountInfo) {
     try {
   let { name, symbol, uri } = parseMetadataAccountData(accountInfo.data);
 
-      // Jika ada URI, fetch file JSON untuk memperoleh logo (optional)
-      // Prefer token-list entry if available (faster and reliable)
+  // If a URI exists, fetch the JSON to obtain the logo (optional)
+  // Prefer token-list entry if available (faster and more reliable)
       let logoURI: string | null = null;
       // try token-list early
       try {
@@ -304,7 +304,7 @@ export async function fetchTokenMetadata(
             // try next
           }
         }
-        // attach captured devVal to be used when building the result below
+  // attach captured devVal to be used when building the result below
         (metaCache as any).__lastDevTemp = devVal;
       }
 
@@ -322,7 +322,7 @@ export async function fetchTokenMetadata(
         if (last) (result as any).dev = last;
         delete (metaCache as any).__lastDevTemp;
       } catch (e) {}
-      // If the token-list has an entry with developer field, use that
+  // If the token-list has an entry with a developer field, use that
       try {
         const tl = await ensureTokenListLoaded();
         const listEntry = tl?.[mintAddress];
@@ -335,11 +335,11 @@ export async function fetchTokenMetadata(
       return result;
     } catch (e) {
       console.warn("[meta] deserialize error:", e);
-      // fall‑through ke fallback token‑list
+  // fall-through to fallback token-list
     }
   }
 
-  // --------- fallback ke token‑list (off‑chain) ----------
+  // --------- fallback to token-list (off-chain) ----------
   const listInfo = await fetchFromTokenList(mintAddress);
   if (listInfo) {
     const result: TokenMeta = {
@@ -354,7 +354,7 @@ export async function fetchTokenMetadata(
     return result;
   }
 
-  // --------- tidak ditemukan ----------
+  // --------- not found ----------
   const empty: TokenMeta = {
     mint: mintAddress,
     name: null,

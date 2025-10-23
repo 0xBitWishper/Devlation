@@ -127,11 +127,27 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
     let cancelled = false;
     async function fetchBalance() {
       if (publicKey && connection) {
+        const safeFetchJSON = async (path: string, timeout = 8000) => {
+          const controller = new AbortController();
+          const id = setTimeout(() => controller.abort(), timeout);
+          try {
+            try {
+              const res = await fetch(path, { signal: controller.signal });
+              clearTimeout(id);
+              const txt = await res.text().catch(() => null);
+              let parsed = null;
+              try { parsed = txt ? JSON.parse(txt) : null } catch (e) { parsed = txt; }
+              return { ok: res.ok, status: res.status, body: parsed };
+            } catch (fetchErr) {
+              clearTimeout(id);
+              return { ok: false, status: null, body: null, error: String(fetchErr) } as any;
+            }
+          } finally { clearTimeout(id); }
+        };
         try {
-          const res = await fetch(`/api/solana-balance?publicKey=${publicKey.toBase58()}`);
-          const data = await res.json();
+          const res = await safeFetchJSON(`/api/solana-balance?publicKey=${publicKey.toBase58()}`);
           if (!cancelled) {
-            if (data.sol !== undefined) setSolBalance(data.sol);
+            if (res.ok && res.body && res.body.sol !== undefined) setSolBalance(res.body.sol);
             else setSolBalance(null);
           }
         } catch {
@@ -292,7 +308,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               >
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center space-y-6 relative w-full h-full flex flex-col items-center justify-center">
-                    {/* Partikel api di seluruh card */}
+                    {/* Flame particles across the card */}
                     <div className="absolute inset-0 pointer-events-none z-0">
                       {[...Array(8)].map((_, i) => {
                         const angle = Math.random() * 2 * Math.PI;

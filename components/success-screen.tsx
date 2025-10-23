@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckCircle2, ExternalLink, Share2 } from "lucide-react"
-import QRCode from "qrcode.react"
+import QRCode from "react-qr-code"
 import { useEffect, useState } from "react"
 import { shareOnX } from "./share-canvas"
 
@@ -13,22 +13,23 @@ export function SuccessScreen({ onBackToDashboard }: SuccessScreenProps) {
   const [showConfetti, setShowConfetti] = useState(true)
   const [isSharing, setIsSharing] = useState(false)
   const [burnInfo, setBurnInfo] = useState<any>(null)
+  const [dateStr, setDateStr] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
   const saveCanvasImage = async () => {
     setIsSaving(true);
     try {
-      // Asumsikan ada canvas dengan id 'burn-canvas' (atau ganti sesuai implementasi)
+  // Assume there's a canvas with id 'burn-canvas' (or change to match implementation)
       const canvas = document.getElementById('burn-canvas') as HTMLCanvasElement;
-      if (canvas) {
+  if (canvas) {
         const link = document.createElement('a');
         link.download = 'burn-certificate.png';
         link.href = canvas.toDataURL('image/png');
         link.click();
       } else {
-        alert('Gambar tidak ditemukan.');
+        alert('Image not found.');
       }
     } catch (e) {
-      alert('Gagal menyimpan gambar.');
+      alert('Failed to save image.');
     } finally {
       setIsSaving(false);
     }
@@ -44,6 +45,13 @@ export function SuccessScreen({ onBackToDashboard }: SuccessScreenProps) {
       const raw = sessionStorage.getItem('devlation.lastBurn');
       if (raw) setBurnInfo(JSON.parse(raw));
     } catch (e) {}
+    // compute formatted date on client only to avoid SSR/client mismatch
+    try {
+      const d = new Date();
+      setDateStr(d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
+    } catch (e) {
+      setDateStr('');
+    }
   }, [])
 
   const handleShareOnX = async () => {
@@ -107,29 +115,36 @@ export function SuccessScreen({ onBackToDashboard }: SuccessScreenProps) {
               {/* Token logo + symbol */}
               <div className="flex flex-col items-center justify-center flex-shrink-0" style={{ minWidth: 120 }}>
                 <div className="w-40 h-40 rounded-3xl overflow-hidden bg-white/10 flex items-center justify-center border border-white/10 ml-3 -mt-4">
-                  <img src={burnInfo?.logoUrl ? burnInfo.logoUrl : "/token/pupup.png"} alt={burnInfo?.symbol || "Token"} className="w-full h-full object-cover" />
+                  {(burnInfo?.logoURI || burnInfo?.icon) ? (
+                    <img
+                      src={burnInfo.logoURI ?? burnInfo.icon}
+                      alt={burnInfo?.symbol ?? "Token"}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full" />
+                  )}
                 </div>
-                <div className="mt-2 text-lg font-bold text-white tracking-wide">{burnInfo?.symbol ? `$${burnInfo.symbol}` : "$TOKEN"}</div>
+                <div className="mt-2 text-lg font-bold text-white tracking-wide">{burnInfo?.symbol ? `$${burnInfo.symbol}` : (burnInfo === null ? <span className="opacity-40">Loading...</span> : "$TOKEN")}</div>
               </div>
               {/* Center: Burn Success, nominal, date (vertical like sample) */}
               <div className="flex-1 flex flex-col items-start justify-center text-left">
                 <div className="mt-[-44px] mb-0.5 ml-16">
                   <div className="text-5xl font-extrabold text-white leading-tight whitespace-nowrap mt-[-5px]">Burn Success</div>
-                    <div className="text-4xl font-mono text-white leading-tight mb-1 mt-1">{burnInfo?.amount ? burnInfo.amount.toLocaleString("en-US") : "1.000.000"}</div>
-                  <div className="text-base text-white/80 mb-1">Date {burnInfo?.date || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                    <div className="text-4xl font-mono text-white leading-tight mb-1 mt-1">{burnInfo?.amount ? Number(burnInfo.amount).toLocaleString("en-US") : (burnInfo === null ? <span className="opacity-40">—</span> : "1,000,000")}</div>
+                  <div className="text-base text-white/80 mb-1">Date {burnInfo?.date ?? dateStr}</div>
                 </div>
               </div>
               {/* QR code kanan bawah */}
               <div className="flex flex-col items-end justify-end flex-shrink-0 w-28 h-full relative">
                 <div className="absolute bottom-5 right-9 flex items-center justify-center bg-white rounded-sm p-1.5" style={{ width: 66, height: 66 }}>
-                  {burnInfo?.txid ? (
+                  {burnInfo && burnInfo.txid ? (
                     <QRCode
                       value={`https://solscan.io/tx/${burnInfo.txid}`}
                       size={56}
                       bgColor="#fff"
                       fgColor="#000"
                       level="M"
-                      includeMargin={false}
                     />
                   ) : (
                     <div className="w-12 h-12 bg-white/20 rounded flex items-center justify-center text-xs text-white/60">QR</div>
