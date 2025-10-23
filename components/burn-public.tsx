@@ -1,16 +1,7 @@
 "use client"
 
-import { ArrowLeft, Calendar, Flame, ExternalLink } from "lucide-react"
 
-interface BurnRecord {
-  id: string
-  tokenSymbol: string
-  tokenName: string
-  amount: number
-  txSignature: string
-  timestamp: number
-  icon: string
-}
+import { BurnRecord } from "../types/burn"
 
 interface BurnHistoryProps {
   records: BurnRecord[]
@@ -18,6 +9,19 @@ interface BurnHistoryProps {
 }
 
 export function BurnHistory({ records, onBack }: BurnHistoryProps) {
+  const [search, setSearch] = useState("");
+
+  const filteredRecords = records.filter(
+    (r) => {
+      const q = search.toLowerCase();
+      return (
+        r.tokenSymbol.toLowerCase().includes(q) ||
+        r.tokenName.toLowerCase().includes(q) ||
+        (r.mint && r.mint.toLowerCase().includes(q))
+      );
+    }
+  );
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString("en-US", {
       month: "short",
@@ -35,9 +39,10 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
       {/* Header */}
-  <header className="backdrop-blur-xl sticky top-0 z-40 bg-background/80">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <header className="backdrop-blur-xl sticky top-0 z-40 bg-background/80">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          {/* Left: Logo & Title */}
+          <div className="flex items-center gap-4 flex-shrink-0">
             <button onClick={onBack} className="p-2 hover:bg-card/50 rounded-lg smooth-transition">
               <ArrowLeft className="w-5 h-5 text-foreground" />
             </button>
@@ -46,14 +51,25 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
                 <img src="/devflation_logo.png" alt="Devflation Logo" className="w-8 h-8 object-contain" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground tracking-tight">Burn Tokens</h1>
+                <h1 className="text-2xl font-bold text-foreground tracking-tight">Blok</h1>
                 <p className="text-xs text-muted-foreground">View all your token burns</p>
               </div>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-semibold text-foreground">{records.length}</p>
-            <p className="text-xs text-muted-foreground">Total Burns</p>
+          {/* Right: Search and total burns */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto md:justify-end mt-3 md:mt-0">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search token..."
+              className="px-3 py-2 rounded-lg border border-border bg-background/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#9945FF] transition w-full sm:w-64"
+              style={{ minWidth: 0 }}
+            />
+            <div className="text-right sm:ml-4">
+              <p className="text-sm font-semibold text-foreground">{filteredRecords.length}</p>
+              <p className="text-xs text-muted-foreground">Total Burns</p>
+            </div>
           </div>
         </div>
       </header>
@@ -93,7 +109,7 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
-        {records.length === 0 ? (
+        {filteredRecords.length === 0 ? (
           <div
             className="rounded-xl backdrop-blur-xl border border-white/10 border-border/40 p-12 text-center"
             style={{ backgroundColor: "rgba(255, 255, 255, 0.05)" }}
@@ -104,7 +120,7 @@ export function BurnHistory({ records, onBack }: BurnHistoryProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            {records.map((record) => (
+            {filteredRecords.map((record) => (
               <div
                 key={record.id}
                 className="rounded-lg backdrop-blur-xl border border-white/10 border-border/40 p-4 hover:bg-card/30 smooth-transition"

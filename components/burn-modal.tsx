@@ -22,7 +22,6 @@ export function BurnModal({ token, onConfirm, onCancel, isDev }: BurnModalProps)
   const [metaReady, setMetaReady] = useState<boolean>(Boolean((token as any)?.meta));
   const toast = useToast();
   const { publicKey } = useWallet();
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     setCopied(true)
@@ -59,7 +58,7 @@ export function BurnModal({ token, onConfirm, onCancel, isDev }: BurnModalProps)
     return () => { cancelled = true; try { if (typeof document !== 'undefined' && prevOverflow !== undefined) document.body.style.overflow = prevOverflow; } catch (e) {} };
   }, [token.mintAddress]);
 
-  const { publicKey } = useWallet();
+  
   // derive dev status from metadata when prop not explicitly provided
   const normalize = (v: any) => (typeof v === 'string' ? v.trim() : (v ? String(v).trim() : ''));
   const derivedIsDev = (() => {
@@ -105,14 +104,8 @@ export function BurnModal({ token, onConfirm, onCancel, isDev }: BurnModalProps)
       });
       return;
     }
-<<<<<<< Updated upstream
     const amt = amount ? Number.parseFloat(amount) : 0;
     onConfirm(amt, method);
-=======
-    if (amount) {
-      onConfirm(Number.parseFloat(amount));
-    }
->>>>>>> Stashed changes
   }
 
   return (

@@ -2,15 +2,9 @@
   {
     "pubkey": "FLXNABJxpqL9b3J2wCZMiU9hdtV4M5n8oB3ckCcZYvJB",
     "mint": "7mjrVuGPSnsx5nL1v7uZgufbaxwNsbATB9LDGzS8pump",
-<<<<<<< Updated upstream
-    "txid": "ghSNZiLMfZdZcGJniheJRje5CJtToTfr14iwzfBvnFoD4WJMQVLYNzu8AedeHnAe1yHszFFLJMHkQCgdwyzLxFS",
+    "txid": "5uAbKsGnY9Bf1hJAY3wozznEsr3ccYhhbCCsxagGHQTC1sLFhGXxVVWmDouV6HdYybgpVPDo3amFqgpoKU4QgNJK",
     "status": "confirmed",
-    "insertedAt": "2025-10-20T17:57:13.775Z",
-=======
-    "txid": "2jsEJ1Z35426Kzhnoah63XbUmQFFrnBE4bLzstyVEaRDMnBKyLwjZumfiodhRov7eGZRSGtXXDPwNsm7KBGnwRRJ",
-    "status": "confirmed",
-    "insertedAt": "2025-10-21T20:09:42.754Z",
->>>>>>> Stashed changes
+    "insertedAt": "2025-10-23T17:08:31.169Z",
     "metadata": {
       "mint": "7mjrVuGPSnsx5nL1v7uZgufbaxwNsbATB9LDGzS8pump",
       "name": "Pupup",
@@ -20,11 +14,6 @@
       "decimals": 6,
       "dev": "FLXNABJxpqL9b3J2wCZMiU9hdtV4M5n8oB3ckCcZYvJB"
     },
-    "error": "Simulation failed. \nMessage: Transaction simulation failed: Blockhash not found. \nLogs: \n[]. \nCatch the `SendTransactionError` and call `getLogs()` on it for full details.",
-<<<<<<< Updated upstream
-    "updatedAt": "2025-10-20T17:57:27.350Z"
-=======
-    "updatedAt": "2025-10-21T20:09:56.492Z"
->>>>>>> Stashed changes
+    "updatedAt": "2025-10-23T17:08:44.931Z"
   }
 ]

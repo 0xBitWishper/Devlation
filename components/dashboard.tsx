@@ -842,7 +842,7 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
               onClick={() => router.push("/public-burn-history")}
               className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
             >
-              Public
+              Blok
             </button>
             <button
               onClick={() => router.push("/reward")}
