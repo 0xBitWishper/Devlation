@@ -1,14 +1,15 @@
 "use client"
 
 // Reward page main component
-const dummyRecords: RewardRecord[] = [
+// dummyRecords timestamps are generated client-side to avoid SSR/CSR hydration mismatches
+const dummyRecordsBase = [
   {
     id: "1",
     tokenSymbol: "SOL",
     tokenName: "Solana",
     amount: 100,
     txSignature: "5f8d2a1b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z",
-    timestamp: Date.now() - 86400000,
+    ageMs: 24 * 60 * 60 * 1000, // 24h ago
     icon: "🟣"
   },
   {
@@ -17,7 +18,7 @@ const dummyRecords: RewardRecord[] = [
     tokenName: "USD Coin",
     amount: 250,
     txSignature: "1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t1u2v3w4x5y6z7a8b",
-    timestamp: Date.now() - 43200000,
+    ageMs: 12 * 60 * 60 * 1000, // 12h ago
     icon: "💵"
   },
   {
@@ -26,13 +27,13 @@ const dummyRecords: RewardRecord[] = [
     tokenName: "Bonk",
     amount: 5000,
     txSignature: "9z8y7x6w5v4u3t2s1r0q9p8o7n6m5l4k3j2i1h0g9f8e7d6c5b4a3z2y",
-    timestamp: Date.now() - 21600000,
+    ageMs: 6 * 60 * 60 * 1000, // 6h ago
     icon: "🐶"
   }
 ]
 
 import { ArrowLeft, Calendar, Flame, ExternalLink, Gift } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -61,14 +62,34 @@ interface RewardProps {
 
 export function RewardPage({ records, onBack }: RewardProps) {
   const isMobile = useIsMobile();
+  // compute client-side records (timestamps) to avoid SSR mismatches
+  const [clientRecords, setClientRecords] = useState<RewardRecord[] | null>(null);
   const [open, setOpen] = useState(false)
   const [isWinner, setIsWinner] = useState(false)
   const [claimed, setClaimed] = useState(false)
-  // Use dummyRecords if records not provided
-  if (!records) records = dummyRecords;
+  // Use dummyRecords if records not provided; build timestamps on client
+  useEffect(() => {
+    if (!records) {
+      const now = Date.now();
+      const built = dummyRecordsBase.map((d) => ({
+        id: d.id,
+        tokenSymbol: d.tokenSymbol,
+        tokenName: d.tokenName,
+        amount: d.amount,
+        txSignature: d.txSignature,
+        timestamp: now - (d.ageMs ?? 0),
+        icon: d.icon,
+      }));
+      setClientRecords(built);
+    } else {
+      setClientRecords(records);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [records]);
   // Filter only records from last 24 hours
   const now = Date.now();
-  let recentRecords = records.filter((r) => now - r.timestamp <= 24 * 60 * 60 * 1000);
+  const effectiveRecords = clientRecords ?? [];
+  let recentRecords = effectiveRecords.filter((r) => now - r.timestamp <= 24 * 60 * 60 * 1000);
   // If no recent records, show one dummy fallback
   if (recentRecords.length === 0) {
     recentRecords = [
@@ -96,6 +117,8 @@ export function RewardPage({ records, onBack }: RewardProps) {
   const formatTxSignature = (sig: string) => {
     return `${sig.slice(0, 8)}...${sig.slice(-8)}`
   }
+
+  const totalCount = (clientRecords ?? records ?? []).length;
 
   const handleClaim = () => {
     // 30% chance to win
@@ -128,7 +151,7 @@ export function RewardPage({ records, onBack }: RewardProps) {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm font-semibold text-foreground">{records.length}</p>
+            <p className="text-sm font-semibold text-foreground">{totalCount}</p>
             <p className="text-xs text-muted-foreground">Total Rewards</p>
           </div>
         </div>
@@ -150,7 +173,7 @@ export function RewardPage({ records, onBack }: RewardProps) {
           ) : (
             <>
               Claim Your Reward
-              {/* Animated light effect jika belum di-claim */}
+              {/* Animated light effect when not yet claimed */}
               <span className="absolute left-0 top-0 h-full w-full pointer-events-none">
                 <span className="block h-full w-20 bg-gradient-to-r from-transparent via-white/60 to-transparent opacity-70 animate-[moveLightBtn_2s_linear_infinite] rounded-xl" />
               </span>

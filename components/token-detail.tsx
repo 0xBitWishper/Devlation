@@ -101,9 +101,9 @@ export function TokenDetail({ token, onBurnClick }: TokenDetailProps) {
       {/* Token Info Grid */}
       <div className="grid grid-cols-2 gap-4">
   <div className="p-4 rounded-lg bg-card/30 border-2 border-[#9945FF]">
-          <p className="text-xs text-muted-foreground mb-2 font-medium">Balance</p>
-          <p className="text-2xl font-bold text-foreground">{token.balance.toLocaleString()}</p>
-        </div>
+    <p className="text-xs text-muted-foreground mb-2 font-medium">Balance</p>
+    <p className="text-2xl font-bold text-foreground">{typeof token.balance === 'number' ? token.balance.toLocaleString() : '-'}</p>
+  </div>
   <div className="p-4 rounded-lg bg-card/30 border-2 border-[#9945FF]">
           <p className="text-xs text-muted-foreground mb-2 font-medium">Price (USDC)</p>
           <TokenUSDCDetail token={token} />

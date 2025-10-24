@@ -26,13 +26,13 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
   const handleConnect = async () => {
     setErrorMsg(null);
     if (!selectedWallet) return;
-    // Temukan wallet adapter yang sesuai
+  // Find the matching wallet adapter
     const found = wallets.find(w => w.adapter.name.toLowerCase() === selectedWallet);
     if (!found) return;
     select(found.adapter.name);
-    // Tunggu hingga wallet adapter benar-benar terpilih
+    // Wait until the wallet adapter is actually selected
     if (!wallet || wallet.adapter.name.toLowerCase() !== selectedWallet) {
-      setErrorMsg("Wallet belum dipilih. Silakan pilih wallet terlebih dahulu.");
+      setErrorMsg("Wallet not selected. Please choose a wallet first.");
       return;
     }
     try {
@@ -40,21 +40,21 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
       await connect();
       setIsConnecting(false);
       onConnect();
-  // Redirect ke halaman dashboard setelah connect sukses
+  // Redirect to dashboard after successful connect
   router.push("/dashboard");
     } catch (e: any) {
       setIsConnecting(false);
       if (e && e.name === "WalletConnectionError") {
-        setErrorMsg("Koneksi wallet dibatalkan. Silakan coba lagi.");
+        setErrorMsg("Wallet connection cancelled. Please try again.");
       } else if (e && e.name === "WalletNotSelectedError") {
-        setErrorMsg("Wallet belum dipilih. Silakan pilih wallet terlebih dahulu.");
+        setErrorMsg("Wallet not selected. Please choose a wallet first.");
       } else {
-        setErrorMsg("Gagal menghubungkan wallet. Silakan coba lagi.");
+        setErrorMsg("Failed to connect wallet. Please try again.");
       }
     }
   };
 
-  // Redirect otomatis jika wallet sudah terhubung
+  // Auto-redirect if wallet is already connected
   useEffect(() => {
     if (connected && publicKey) {
       router.push("/dashboard");
@@ -62,7 +62,7 @@ export function ConnectWallet({ onConnect, onBack }: ConnectWalletProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, publicKey]);
 
-  // Otomatis disconnect jika user klik back
+  // Automatically disconnect when user clicks back
   useEffect(() => {
     return () => {
       if (connected) disconnect();

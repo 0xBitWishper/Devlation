@@ -3,9 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useToast } from "../hooks/use-toast"
 import { BurnModal } from "./burn-modal"
-import { TokenManageModal } from "./token-manage-modal"
 import { Search, Filter, Flame, Home } from "lucide-react"
-import { Settings } from "lucide-react"
 import {
   Select,
   SelectTrigger,
@@ -80,6 +78,10 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
       return false;
     } catch (e) { return false; }
   }, [publicKey, tokensOwned]);
+  // Prevent SSR/CSR mismatch for wallet-dependent UI by rendering those parts
+  // only after the component is mounted on the client.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   // Transaction status UI
   const [txStatus, setTxStatus] = useState<{ txid: string; status: 'pending' | 'confirmed' | 'failed'; message?: string; method?: string } | null>(null);
   const txPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -163,19 +165,59 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
         }
       } catch (e) {}
 
+      // Safe server fetch helper with timeout to avoid unhandled network errors
+      const safeFetchJSON = async (path: string, timeout = 10000) => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+          try {
+            const res = await fetch(path, { signal: controller.signal });
+            clearTimeout(id);
+            const text = await res.text().catch(() => null);
+            let parsed = null;
+            try { parsed = text ? JSON.parse(text) : null; } catch (e) { parsed = text; }
+            return { ok: res.ok, status: res.status, body: parsed };
+          } catch (fetchErr) {
+            clearTimeout(id);
+            return { ok: false, status: null, body: null, error: String(fetchErr) } as any;
+          }
+        } finally { clearTimeout(id); }
+      };
+
       if (preferServer) {
         try {
-          const apiRes = await fetch(`/api/solana-tokens?publicKey=${targetPubKey.toBase58()}`);
-          const data = await apiRes.json();
-          try { console.debug('[fetchTokens] server /api/solana-tokens response', { status: apiRes.status, body: data }); } catch (e) {}
-          if (Array.isArray(data.tokens)) {
-            if (mountedRef.current) setTokensOwned(data.tokens);
-            try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: data.tokens }); } catch (e) {}
-            return;
+          const res = await safeFetchJSON(`/api/solana-tokens?publicKey=${targetPubKey.toBase58()}`);
+          try { console.debug('[fetchTokens] server /api/solana-tokens response', { status: res.status, body: res.body }); } catch (e) {}
+          if (res.ok) {
+            if (Array.isArray(res.body?.tokens)) {
+              if (mountedRef.current) setTokensOwned(res.body.tokens);
+              try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: res.body.tokens }); } catch (e) {}
+              return;
+            }
+            if (Array.isArray(res.body)) {
+              if (mountedRef.current) setTokensOwned(res.body);
+              try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: res.body }); } catch (e) {}
+              return;
+            }
+            // If server returned an empty object or missing tokens, treat as empty list
+            if (res.body && typeof res.body === 'object' && (!res.body.tokens || (Array.isArray(res.body.tokens) && res.body.tokens.length === 0))) {
+              if (mountedRef.current) setTokensOwned([]);
+              try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: [] }); } catch (e) {}
+              return;
+            }
+            // Unexpected body shape
+            console.warn('[fetchTokens] server API returned unexpected body', { status: res.status, body: res.body });
+            if (mountedRef.current) setTokensError(res.body?.error ?? `Server API error ${res.status}`);
+            // fallthrough to try client RPC
+          } else {
+            // Non-ok status from server
+            console.warn('[fetchTokens] server API responded with error status', { status: res.status, body: res.body });
+            if (mountedRef.current) setTokensError(res.body?.error ?? `Server API error ${res.status}`);
+            // fallthrough to try client RPC
           }
         } catch (e) {
-          console.warn('[fetchTokens] server API call failed, will try client RPC', e);
-          // fallthrough to try client RPC below
+          console.warn('[fetchTokens] server API call threw', e);
+          if (mountedRef.current) setTokensError('Tidak dapat menghubungi server API. Mencoba RPC klien.');
         }
       }
 
@@ -196,31 +238,61 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
             console.warn('Client RPC call failed, falling back to server API:', rpcErr);
           }
           try {
-            const apiRes = await fetch(`/api/solana-tokens?publicKey=${targetPubKey.toBase58()}`);
-              let data: any = null;
-              try { data = await apiRes.json(); } catch (e) {
-                try { const txt = await apiRes.text(); console.warn('[fetchTokens] server returned non-json', txt); } catch (_) {}
-              }
-              try { console.debug('[fetchTokens] fallback server response', { status: apiRes.status, body: data }); } catch (e) {}
-              // Accept either { tokens: [...] } or an array directly
-              if (Array.isArray(data?.tokens)) {
-                if (mountedRef.current) setTokensOwned(data.tokens);
+            const res = await safeFetchJSON(`/api/solana-tokens?publicKey=${targetPubKey.toBase58()}`);
+            try { console.debug('[fetchTokens] fallback server response', { status: res.status, body: res.body }); } catch (e) {}
+            if (res.ok) {
+              if (Array.isArray(res.body?.tokens)) {
+                if (mountedRef.current) setTokensOwned(res.body.tokens);
+                try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: res.body.tokens }); } catch (e) {}
                 return;
               }
-              if (Array.isArray(data)) {
-                if (mountedRef.current) setTokensOwned(data);
+              if (Array.isArray(res.body)) {
+                if (mountedRef.current) setTokensOwned(res.body);
+                try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: res.body }); } catch (e) {}
                 return;
               }
-              // Some server responses (429/HTML) may not contain the expected shape.
-              // Log and surface a friendly UI message instead of throwing a hard error.
-              console.error('Server API returned invalid token list', { status: apiRes.status, body: data });
-              if (mountedRef.current) setTokensError('Server API returned invalid token list. Lihat console untuk detail.');
+              // If server returned an object with no tokens ({} or missing tokens), treat as empty list rather than error.
+              if (res.body && typeof res.body === 'object' && (!res.body.tokens || (Array.isArray(res.body.tokens) && res.body.tokens.length === 0))) {
+                if (mountedRef.current) setTokensOwned([]);
+                try { tokenListCache.set(targetPubKey.toBase58(), { ts: Date.now(), tokens: [] }); } catch (e) {}
+                return;
+              }
+              // Unexpected body shape - treat as non-fatal but warn and surface to UI
+              console.warn('Server API returned unexpected token list body', { status: res.status, body: res.body });
+              if (mountedRef.current) setTokensError(res.body?.error ?? `Server API error ${res.status}`);
+              // Try a single reload to recover from transient server inconsistencies (guard via sessionStorage)
+              try {
+                const key = 'devlation_dashboard_reload_attempts';
+                const attempts = Number(sessionStorage.getItem(key) || '0');
+                if (attempts < 1) {
+                  sessionStorage.setItem(key, String(attempts + 1));
+                  setTimeout(() => { try { window.location.reload(); } catch (e) {} }, 600);
+                } else {
+                  console.warn('Dashboard reload suppressed to avoid loop');
+                }
+              } catch (e) {}
               return;
+            } else {
+              // Non-ok HTTP status from fallback server - warn and surface to UI
+              console.warn('Fallback server API returned error status', { status: res.status, body: res.body });
+              if (mountedRef.current) setTokensError(res.body?.error ?? `Server API error ${res.status}`);
+              // schedule one reload attempt to recover transient errors, but avoid loop
+              try {
+                const key = 'devlation_dashboard_reload_attempts';
+                const attempts = Number(sessionStorage.getItem(key) || '0');
+                if (attempts < 1) {
+                  sessionStorage.setItem(key, String(attempts + 1));
+                  setTimeout(() => { try { window.location.reload(); } catch (e) {} }, 600);
+                } else {
+                  console.warn('Dashboard reload suppressed to avoid loop');
+                }
+              } catch (e) {}
+              return;
+            }
           } catch (apiErr) {
-              // eslint-disable-next-line no-console
-              console.error('Fallback server API also failed:', apiErr);
-              if (mountedRef.current) setTokensError('Server API fallback failed. Cek console untuk detail.');
-              return;
+            console.warn('Fallback server API also failed:', apiErr);
+            if (mountedRef.current) setTokensError('Server API fallback failed. Check console for details.');
+            return;
           }
         }
 
@@ -236,7 +308,7 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           };
         });
 
-  const uniqueMints = Array.from(new Set(initial.map((t: any) => String(t.mint)).filter(Boolean))) as string[];
+        const uniqueMints = Array.from(new Set(initial.map((t: any) => String(t.mint)).filter(Boolean))) as string[];
         const { fetchMultipleMetadata, fetchJupiterPrices } = await import('../lib/solanaMetadata');
         // Run metadata and price fetches in parallel for speed, but guard empty arrays
         const [metaMap, priceMap] = await Promise.all([
@@ -289,15 +361,15 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
               }, delay);
               map.set(key, entry);
             } else if (entry.count >= MAX_RETRIES) {
-              if (mountedRef.current) setTokensError('Terjadi terlalu banyak permintaan. Coba lagi nanti.');
+              if (mountedRef.current) setTokensError('Too many requests. Please try again later.');
             }
             return;
           }
         } catch (inner) {}
-        // non-rate errors fallthrough to show generic message
-        // eslint-disable-next-line no-console
-        console.error('fetchTokens error:', e);
-        if (mountedRef.current) setTokensError("Gagal mengambil data token. Coba refresh atau cek koneksi wallet.");
+    // non-rate errors fallthrough to show generic message
+    // eslint-disable-next-line no-console
+    console.warn('fetchTokens error:', e);
+  if (mountedRef.current) setTokensError("Failed to fetch token data. Try refreshing or check your wallet connection.");
       }
     } finally {
       // clear inFlight and handle pending rerun
@@ -340,18 +412,30 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
         setSolBalance(null);
         setBalanceError(null);
       }
-      const res = await fetch(`/api/solana-balance?publicKey=${target.toBase58()}`);
-      const data = await res.json();
+      // safe fetch helper (non-throwing, returns status/body)
+      const safeFetchJSON = async (path: string, timeout = 10000) => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+          const res = await fetch(path, { signal: controller.signal });
+          clearTimeout(id);
+          const text = await res.text().catch(() => null);
+          let parsed = null;
+          try { parsed = text ? JSON.parse(text) : null; } catch (e) { parsed = text; }
+          return { ok: res.ok, status: res.status, body: parsed };
+        } finally { clearTimeout(id); }
+      };
+
+      const res = await safeFetchJSON(`/api/solana-balance?publicKey=${target.toBase58()}`);
       if (mountedRef.current) {
-        if (data.sol !== undefined) {
-          setSolBalance(data.sol);
-          balanceRef.current = data.sol;
-          try { balanceCache.set(target.toBase58(), { ts: Date.now(), sol: data.sol }); } catch (e) {}
-          // success -> clear any retry state
+        if (res.ok && res.body && res.body.sol !== undefined) {
+          setSolBalance(res.body.sol);
+          balanceRef.current = res.body.sol;
+          try { balanceCache.set(target.toBase58(), { ts: Date.now(), sol: res.body.sol }); } catch (e) {}
           try { balanceRetryRef.current.delete(target.toBase58()); } catch (e) {}
         } else {
           setSolBalance(null);
-          setBalanceError("Gagal mengambil saldo SOL. Coba refresh atau cek koneksi wallet.");
+          setBalanceError(res.body?.error ?? `Server API error ${res.status ?? ''}`);
         }
       }
   } catch (e) {
@@ -375,14 +459,14 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
             map.set(key, entry);
             return;
           } else if (entry.count >= MAX_RETRIES) {
-            if (mountedRef.current) setBalanceError('Terjadi terlalu banyak permintaan. Coba lagi nanti.');
+            if (mountedRef.current) setBalanceError('Too many requests. Please try again later.');
             return;
           }
         }
       } catch (inner) {}
       if (mountedRef.current) {
         setSolBalance(null);
-        setBalanceError("Gagal mengambil saldo SOL. Coba refresh atau cek koneksi wallet.");
+        setBalanceError("Failed to fetch SOL balance. Try refreshing or check your wallet connection.");
       }
     }
   }, [publicKey]);
@@ -459,6 +543,57 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
     window.addEventListener('devlation:walletChanged', handler as EventListener);
     return () => window.removeEventListener('devlation:walletChanged', handler as EventListener);
   }, [fetchTokens, fetchBalance, toast]);
+
+  // When the wallet adapter's publicKey changes (user switched accounts/wallets),
+  // perform a safe one-time reload to ensure app state (server vs client) is consistent.
+  // Debounce to avoid multiple rapid reloads and guard against reload loops.
+  useEffect(() => {
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const onWalletChange = () => {
+      try {
+        // Read incoming pubkey marker; if it's same as last reloaded pubkey, skip reload
+        let incomingPub: string | null = null;
+        try { incomingPub = sessionStorage.getItem('devlation_wallet_pubkey'); } catch (e) {}
+        // If incomingPub is empty string or null, skip reload — avoid reload loops when no wallet
+        if (!incomingPub) return;
+        try {
+          const lastReloaded = sessionStorage.getItem('devlation_last_reloaded_pubkey');
+          if (lastReloaded && incomingPub === lastReloaded) {
+            return; // already reloaded for this pubkey
+          }
+        } catch (e) {}
+        // Delay reload slightly to allow adapter/provider to settle
+        reloadTimer = setTimeout(() => {
+          try {
+            if (typeof window !== 'undefined') {
+              // mark that we reloaded for this pubkey to avoid repeated reloads
+              try { if (incomingPub) sessionStorage.setItem('devlation_last_reloaded_pubkey', String(incomingPub)); } catch (e) {}
+              window.location.replace(window.location.href);
+            }
+          } catch (e) {
+            // swallow errors so UI doesn't break
+          }
+        }, 200);
+      } catch (e) {}
+    };
+
+    // Listen to the custom event (already emitted in other code) and also to adapter events
+    try { window.addEventListener('devlation:walletChanged', onWalletChange as EventListener); } catch (e) {}
+
+    // Also listen for storage changes (support multi-tab wallet changes)
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === 'devlation_wallet_pubkey') {
+        onWalletChange();
+      }
+    };
+    try { window.addEventListener('storage', onStorage); } catch (e) {}
+
+    return () => {
+      try { if (reloadTimer) clearTimeout(reloadTimer); } catch (e) {}
+      try { window.removeEventListener('devlation:walletChanged', onWalletChange as EventListener); } catch (e) {}
+      try { window.removeEventListener('storage', onStorage); } catch (e) {}
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("all")
   const [selectedToken, setSelectedToken] = useState<any>(null)
@@ -471,9 +606,16 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
   const [tokenMeta, setTokenMeta] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    fetch(TOKEN_LIST_CDN)
-      .then((res) => res.json())
-      .then((data) => {
+    let cancelled = false;
+    const safeFetchTokenList = async () => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch(TOKEN_LIST_CDN, { signal: controller.signal });
+        clearTimeout(id);
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
         const meta: Record<string, any> = {};
         if (data && Array.isArray(data.tokens)) {
           for (const t of data.tokens) {
@@ -481,7 +623,14 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           }
         }
         setTokenMeta(meta);
-      });
+      } catch (e) {
+        // ignore network failures for token list; UI will fallback to CDN path per-token
+      } finally {
+        clearTimeout(id);
+      }
+    };
+    safeFetchTokenList();
+    return () => { cancelled = true; };
   }, []);
 
   // Map data SPL token ke format TokenList dengan logo dan symbol dari token list
@@ -508,7 +657,7 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
   const logoURI = token.logoURI ?? token.logo ?? meta.logoURI ?? meta.logo ?? fallbackLogo;
   const balance = token.amount ?? token.balance ?? 0;
   const decimals = token.decimals ?? meta.decimals ?? 0;
-  const symbol = token.symbol ?? meta.symbol ?? (decimals === 0 ? 'NFT' : undefined);
+  let symbol = token.symbol ?? meta.symbol ?? (decimals === 0 ? 'NFT' : undefined);
   const name = token.name ?? meta.name ?? mint;
 
       return {
@@ -525,19 +674,6 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
       };
     })
   ];
-
-    // Build token list for manage modal (must be after tokens is assigned)
-    const manageTokens = tokens.map(t => ({
-      symbol: t.symbol,
-      name: t.name,
-      logoURI: t.logoURI,
-      mintAddress: t.mintAddress,
-      visible: tokenVisibility[t.symbol] !== false // default true
-    }));
-
-    const handleToggleToken = (symbol: string) => {
-      setTokenVisibility(prev => ({ ...prev, [symbol]: !(prev[symbol] !== false) }));
-    };
 
   // Debug log tokensOwned dan tokens
   if (typeof window !== 'undefined') {
@@ -570,7 +706,7 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
     setBurnModalToken(null);
   };
 
-  const handleBurnConfirm = (amount: number, method: 'instruction' | 'send' = 'instruction') => {
+  const handleBurnConfirm = (amount: number, method: 'instruction' | 'send' = 'instruction', image?: string) => {
     async function burnToken() {
       if (!burnModalToken || !publicKey || !amount || !connection) return;
       // Inform user if they chose Send-to-Death — currently we perform the same burn instruction
@@ -581,6 +717,49 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
       }
       // Aktifkan mode TX agar provider pakai endpoint TX
       if (typeof window !== 'undefined') (window as any).txMode = true;
+      // Helpers declared at function scope so outer catch/finally can access them
+      const isUserRejection = (maybeErr: any) => {
+        try {
+          if (!maybeErr) return false;
+          const msg = typeof maybeErr === 'string' ? maybeErr : (maybeErr?.message ?? (maybeErr?.toString && maybeErr.toString()) ?? '');
+          const name = String(maybeErr?.name ?? '').toLowerCase();
+          const code = maybeErr?.code ?? maybeErr?.error?.code ?? maybeErr?.status ?? null;
+          const s = String(msg || '').toLowerCase();
+          if (s.includes('rejected') || s.includes('user rejected') || s.includes('user rejected the request') || s.includes('user canceled') || s.includes('user cancelled') || s.includes('cancelled') || s.includes('cancelled by user')) return true;
+          if (name.includes('walletsigntransactionerror') || name.includes('userrejectedrequest') || name.includes('walleterror') || name.includes('walletcancel') || name.includes('walletcancelled') || name.includes('userrejected')) return true;
+          if (code === 4001 || code === 1 || String(code).toLowerCase().includes('user_rejected') || String(code).toLowerCase().includes('userrejected') || String(code).toLowerCase().includes('rejected')) return true;
+          return false;
+        } catch (e) { return false; }
+      };
+
+      const safeCall = async (fn: () => any): Promise<{ ok: true; value: any } | { ok: false; err: any }> => {
+        try {
+          const res = fn();
+          if (res && typeof res.then === 'function') {
+            try {
+              const v = await res;
+              return { ok: true as const, value: v };
+            } catch (err: any) {
+              return { ok: false as const, err };
+            }
+          }
+          return { ok: true as const, value: res };
+        } catch (err: any) {
+          return { ok: false as const, err };
+        }
+      };
+
+      const getErrMessage = (e: any) => {
+        try {
+          if (!e && e !== 0) return '';
+          if (typeof e === 'string') return e;
+          if (typeof e === 'number') return String(e);
+          if (e instanceof Error && e.message) return String(e.message);
+          if (e && typeof e.message === 'string') return e.message;
+          if (e && typeof e.toString === 'function') return e.toString();
+          try { return JSON.stringify(e); } catch (je) { return String(e); }
+        } catch (outer) { return String(e); }
+      };
       try {
         const mint = new PublicKey(burnModalToken.mintAddress);
         const owner = publicKey;
@@ -645,29 +824,119 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           }
         } catch (e) {}
 
-        // Attempt to sign with wallet adapter. If adapter doesn't provide signTransaction
-        // or user rejects the signature, show a friendly toast and abort gracefully.
+
+        // Some wallet adapters may emit unhandled rejections or even synchronous errors
+        // that bypass local try/catch; install temporary global handlers to convert
+        // those into a toast and avoid the dev overlay. We keep them for a short
+        // grace period after signing to catch delayed rejections.
+        // Stronger temporary handlers: install capture-phase listeners AND
+        // temporarily override window's onerror/onunhandledrejection properties.
+        // This increases the chance we intercept wallet adapter emissions before
+        // Next's dev overlay consumes them.
+        const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
+          try {
+            const reason: any = (ev && (ev as any).reason) || null;
+            try { console.debug('[dev-debug] unhandledrejection reason:', reason); } catch (e) {}
+            if (isUserRejection(reason)) {
+              try { ev.preventDefault(); } catch (e) {}
+              try { ev.stopImmediatePropagation?.(); } catch (e) {}
+              try { ev.stopPropagation?.(); } catch (e) {}
+              try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+            }
+          } catch (e) {}
+        };
+
+        const onWindowError = (ev: ErrorEvent) => {
+          try {
+            const err: any = (ev && (ev as any).error) || null;
+            try { console.debug('[dev-debug] window.error event:', { err, message: ev?.message, filename: ev?.filename, lineno: ev?.lineno, colno: ev?.colno }); } catch (e) {}
+            if (isUserRejection(err ?? ev?.message)) {
+              try { ev.preventDefault(); } catch (e) {}
+              try { ev.stopImmediatePropagation?.(); } catch (e) {}
+              try { ev.stopPropagation?.(); } catch (e) {}
+              try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+            }
+          } catch (e) {}
+        };
+
+        // Save previous property handlers so we can restore them
+        const prevOnUnhandledRejection = (window as any).onunhandledrejection;
+        const prevOnError = (window as any).onerror;
+
+        const propUnhandled = (ev: any) => {
+          try {
+            const reason = ev?.reason ?? null;
+            if (isUserRejection(reason)) {
+              try { ev.preventDefault(); } catch (e) {}
+              try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+              return true;
+            }
+          } catch (e) {}
+          try { if (typeof prevOnUnhandledRejection === 'function') return prevOnUnhandledRejection(ev); } catch (e) {}
+          return false;
+        };
+
+        const propError = (message: any, source?: string, lineno?: number, colno?: number, error?: any) => {
+          try {
+            if (isUserRejection(error ?? message)) {
+              try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+              return true;
+            }
+          } catch (e) {}
+          try { if (typeof prevOnError === 'function') return prevOnError(message, source, lineno, colno, error); } catch (e) {}
+          return false;
+        };
+
         try {
+          try { window.addEventListener('unhandledrejection', onUnhandledRejection as any, { capture: true }); } catch (e) {}
+          try { window.addEventListener('error', onWindowError as any, { capture: true }); } catch (e) {}
+          try { (window as any).onunhandledrejection = propUnhandled; } catch (e) {}
+          try { (window as any).onerror = propError; } catch (e) {}
           const doSign: any = signTransaction;
           if (typeof doSign !== 'function') {
-            try { toast({ title: 'Wallet tidak didukung', description: 'Wallet Anda tidak menyediakan `signTransaction`. Gunakan wallet adapter yang mendukung signTransaction.' }); } catch (e) {}
+            try { toast({ title: 'Wallet not supported', description: 'Your wallet does not provide `signTransaction`. Use a wallet adapter that supports signTransaction.' }); } catch (e) {}
             return;
           }
           try {
-            signedTx = await doSign(tx as any);
-          } catch (signErr: any) {
-            const msg = String((signErr && (signErr.message || signErr?.toString())) ?? signErr);
-            const name = String((signErr && signErr.name) ?? '').toLowerCase();
-            if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('user rejected') || name.includes('walletsigntransactionerror')) {
-              try { toast({ title: 'Tanda tangan dibatalkan', description: 'Anda membatalkan permintaan tanda tangan.' }); } catch (e) {}
+            // Use safeCall to ensure no unhandled rejections escape from the
+            // wallet adapter's signTransaction implementation.
+            const signOutcome = await safeCall(() => doSign(tx as any));
+            if (!signOutcome.ok) {
+              const signErr = signOutcome.err;
+              try { console.debug('[dev-debug] signTransaction threw (wrapped):', signErr); } catch (e) {}
+              if (isUserRejection(signErr)) {
+                try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+                return;
+              }
+              const msg = getErrMessage(signErr) || String(signErr);
+              try { toast({ title: 'Failed to sign', description: msg || 'An error occurred while signing the transaction.' }); } catch (e) {}
               return;
             }
-            try { toast({ title: 'Gagal menandatangani', description: msg || 'Terjadi kesalahan saat menandatangani transaksi.' }); } catch (e) {}
+            signedTx = signOutcome.value;
+            try { console.debug('[dev-debug] signTransaction resolved (wrapped), signedTx:', signedTx); } catch (e) {}
+          } catch (outerSignErr) {
+            try { console.debug('[dev-debug] signTransaction outer threw:', outerSignErr); } catch (e) {}
+            // defensive fallback
+            if (isUserRejection(outerSignErr)) {
+              try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+              return;
+            }
+            try { toast({ title: 'Failed to sign', description: String(outerSignErr) }); } catch (e) {}
             return;
           }
-        } catch (e) {
-          try { toast({ title: 'Gagal menandatangani', description: String(e) }); } catch (ee) {}
-          return;
+        } finally {
+          // Keep the listeners alive for a short grace period to catch delayed
+          // unhandled rejections some adapters emit after the signing call.
+          try {
+            // extend grace period for adapters that emit delayed rejections
+            setTimeout(() => {
+              try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
+              try { window.removeEventListener('error', onWindowError as any); } catch (e) {}
+            }, 2500);
+          } catch (e) {
+            try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (ee) {}
+            try { window.removeEventListener('error', onWindowError as any); } catch (ee) {}
+          }
         }
 
         let txid: string | null = null;
@@ -684,13 +953,19 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           let jr: any = null;
           while (attempts < 2) {
             attempts += 1;
-            const res = await fetch('/api/tx/broadcast', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signedTxBase64: b64, pubkey: publicKey?.toBase58(), mint: burnModalToken.mintAddress, metadata: burnModalToken?.meta ?? {} }) });
-            jr = await res.json();
-            if (res.ok) break;
+            let res: Response | null = null;
+            try {
+              res = await fetch('/api/tx/broadcast', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signedTxBase64: b64, pubkey: publicKey?.toBase58(), mint: burnModalToken.mintAddress, metadata: burnModalToken?.meta ?? {} }) });
+            } catch (netErr) {
+              try { toast({ title: 'Network error', description: 'Failed to reach server to broadcast transaction.' }); } catch (e) {}
+              return;
+            }
+            try { jr = await res.json(); } catch (e) { jr = null; }
+            if (res && res.ok) break;
             // if server says blockhash expired, try re-obtaining blockhash and re-sign once
             if (res.status === 409 && jr?.error === 'blockhash_not_found' && attempts < 2) {
               try {
-                toast({ title: 'Blockhash kadaluarsa', description: 'Mencoba perbarui blockhash dan ulangi. Mohon konfirmasi tanda tangan lagi.' });
+                toast({ title: 'Blockhash expired', description: 'Attempting to refresh blockhash and retry. Please confirm the signature again.' });
                 const r2 = await fetch('/api/tx/recent-blockhash');
                 const j2 = await r2.json();
                 if (j2?.blockhash) tx.recentBlockhash = j2.blockhash;
@@ -698,23 +973,36 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
                 try {
                   const doSignAgain: any = signTransaction;
                   if (typeof doSignAgain !== 'function') {
-                    try { toast({ title: 'Wallet tidak didukung', description: 'Wallet Anda tidak menyediakan `signTransaction` untuk re-sign. Gunakan wallet adapter yang mendukung signTransaction.' }); } catch (e) {}
+                    try { toast({ title: 'Wallet not supported', description: 'Your wallet does not provide `signTransaction` for re-sign. Use a wallet adapter that supports signTransaction.' }); } catch (e) {}
                     break;
                   }
                   try {
-                    signedTx = await doSignAgain(tx as any);
-                  } catch (signErr2: any) {
-                    const msg2 = String((signErr2 && (signErr2.message || signErr2?.toString())) ?? signErr2);
-                    const name2 = String((signErr2 && signErr2.name) ?? '').toLowerCase();
-                    if (msg2.toLowerCase().includes('rejected') || msg2.toLowerCase().includes('user rejected') || name2.includes('walletsigntransactionerror')) {
-                      try { toast({ title: 'Tanda tangan dibatalkan', description: 'Anda membatalkan permintaan tanda tangan.' }); } catch (e) {}
+                    // Same robust wrapper for re-sign
+                    let signOutcome2: { ok: true; value: any } | { ok: false; err: any };
+                    try {
+                      signOutcome2 = await safeCall(() => doSignAgain(tx as any));
+                    } catch (e) {
+                      signOutcome2 = { ok: false as const, err: e };
+                    }
+                    if (!signOutcome2.ok) {
+                      const signErr2 = signOutcome2.err;
+                      const msg2 = getErrMessage(signErr2) || String(signErr2);
+                      const name2 = String((signErr2 && signErr2.name) ?? '').toLowerCase();
+                      const isUserRejected2 = msg2.toLowerCase().includes('rejected') || msg2.toLowerCase().includes('user rejected') || name2.includes('walletsigntransactionerror') || (signErr2 && (signErr2.name === 'WalletSignTransactionError' || signErr2?.code === 4001));
+                      if (isUserRejected2) {
+                        try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+                        break;
+                      }
+                      try { toast({ title: 'Failed to sign', description: msg2 || 'An error occurred while signing the transaction.' }); } catch (e) {}
                       break;
                     }
-                    try { toast({ title: 'Gagal menandatangani', description: msg2 || 'Terjadi kesalahan saat menandatangani transaksi.' }); } catch (e) {}
+                    signedTx = signOutcome2.value;
+                  } catch (outer2) {
+                    try { toast({ title: 'Failed to sign', description: String(outer2) }); } catch (e) {}
                     break;
                   }
                 } catch (e) {
-                  try { toast({ title: 'Gagal menandatangani', description: String(e) }); } catch (ee) {}
+                  try { toast({ title: 'Failed to sign', description: String(e) }); } catch (ee) {}
                   break;
                 }
                 const raw2 = signedTx.serialize();
@@ -732,14 +1020,14 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
             break;
           }
           if (!jr || !jr.txid) {
-            try { toast({ title: 'Broadcast gagal', description: String(jr?.detail ?? jr?.error ?? 'Broadcast failed') }); } catch (e) {}
+            try { toast({ title: 'Broadcast failed', description: String(jr?.detail ?? jr?.error ?? 'Broadcast failed') }); } catch (e) {}
             return;
           }
           const txidFromServer = jr.txid;
           txid = txidFromServer;
         } else {
           // We do NOT fallback to sendTransaction to avoid browser RPC calls which may be forbidden.
-          try { toast({ title: 'Wallet tidak mendukung', description: 'Wallet tidak mendukung `signTransaction`. Gunakan wallet adapter yang mendukung signTransaction agar transaksi dapat ditandatangani secara lokal.' }); } catch (e) {}
+          try { toast({ title: 'Wallet not supported', description: 'Your wallet does not support `signTransaction`. Use a wallet adapter that supports signTransaction so transactions can be signed locally.' }); } catch (e) {}
           return;
         }
         // update UI status
@@ -776,29 +1064,43 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           }
         }, TX_POLL_INTERVAL) as unknown as ReturnType<typeof setInterval>;
         try {
-          const burnRec = { txid: txid ?? 'unknown', mint: burnModalToken.mintAddress, amount, symbol: burnModalToken.symbol, metadata: burnModalToken.meta ?? {} };
+          const burnRec: any = { txid: txid ?? 'unknown', mint: burnModalToken.mintAddress, amount, symbol: burnModalToken.symbol, metadata: burnModalToken.meta ?? {} };
+          // include logo/icon if available or from provided image
+          if (image) burnRec.logoURI = image;
+          if ((burnModalToken as any)?.logoURI) burnRec.logoURI = (burnModalToken as any).logoURI;
+          if ((burnModalToken as any)?.icon) burnRec.icon = (burnModalToken as any).icon;
           try { sessionStorage.setItem('devlation.lastBurn', JSON.stringify(burnRec)); } catch (e) {}
         } catch (e) {}
         toast({ title: 'Burn submitted', description: `Tx ${txid}` });
         try { router.push('/success'); } catch (e) { try { window.location.href = '/success'; } catch (e) {} }
       } catch (err: any) {
-        const message = err?.message || String(err);
+        const message = (() => {
+          try {
+            if (!err && err !== 0) return '';
+            if (typeof err === 'string') return err;
+            if (typeof err === 'number') return String(err);
+            if (err instanceof Error && err.message) return String(err.message);
+            if (err && typeof err.message === 'string') return err.message;
+            if (err && typeof err.toString === 'function') return err.toString();
+            try { return JSON.stringify(err); } catch (je) { return String(err); }
+          } catch (outer) { return String(err); }
+        })();
         // surface blockhash special case
-        if (message && message.toLowerCase().includes('blockhash')) {
-          toast({ title: 'Burn gagal: Blockhash kadaluarsa', description: 'Silakan buka modal dan coba lagi.' });
+          if (message && message.toLowerCase().includes('blockhash')) {
+          toast({ title: 'Burn failed: Blockhash expired', description: 'Please re-open the modal and try again.' });
         } else {
-          toast({ title: 'Burn gagal', description: message });
+          toast({ title: 'Burn failed', description: message });
         }
-        console.error('Burn error:', err);
+  console.warn('Burn error:', err);
       } finally {
         // Kembalikan mode ke normal
         if (typeof window !== 'undefined') delete (window as any).txMode;
         setBurnModalToken(null);
       }
     }
-    burnToken();
+    // Return the promise so caller (BurnModal) can await and show loading state
+    return burnToken();
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95">
       {/* Transaction status banner */}
@@ -826,32 +1128,36 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
         />
       )}
       <header className="border-b border-border/40 backdrop-blur-xl sticky top-0 z-40 bg-background/80">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+  <div className="max-w-7xl mx-auto px-6 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-16 flex items-center justify-center">
-              <img src="/devflation.png" alt="Devflation Logo" className="h-10 w-auto max-w-xs object-contain" />
-            </div>
+            {/* Home button removed as requested */} 
+            <img
+              src="/devflation.png"
+              alt="Devflation Logo"
+              className="h-12 w-auto sm:h-12 ml-1"
+              style={{ maxWidth: '120px', objectFit: 'contain' }}
+            /> 
           </div>
-          {!isMobile && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push("/burn-history")}
-                className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
-              >
-                History
-              </button>
-              <button
-                onClick={() => router.push("/public-burn-history")}
-                className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
-              >
-                Public
-              </button>
-              <button
-                onClick={() => router.push("/reward")}
-                className="px-4 py-2.5 rounded-lg border border-[#14F195] text-[#14F195] font-medium hover:bg-[#14F195]/10 smooth-transition text-sm"
-              >
-                Reward
-              </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/burn-history")}
+              className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
+            >
+              History
+            </button>
+            <button
+              onClick={() => router.push("/block-transaction")}
+              className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
+            >
+              Block Transaction
+            </button>
+            <button
+              onClick={() => router.push("/reward")}
+              className="px-4 py-2.5 rounded-lg border border-[#14F195] text-[#14F195] font-medium hover:bg-[#14F195]/10 smooth-transition text-sm"
+            >
+              Reward
+            </button>
+            {mounted ? (
               <div
                 className="flex items-center gap-3 px-4 py-2.5 rounded-lg backdrop-blur-xl border border-white/10"
                 style={{ backgroundColor: "rgba(255, 255, 255, 0.03)" }}
@@ -865,11 +1171,15 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
                   ◎ {balanceError ? <span className="text-red-500">{balanceError}</span> : solBalance === null && publicKey ? <span className="animate-pulse">Loading...</span> : (solBalance !== null && !isNaN(solBalance)) ? parseFloat(solBalance.toString()).toFixed(6) : "-"} SOL
                 </span>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-white/5 text-xs text-muted-foreground">
+                <span>Not connected</span>
+              </div>
+            )}
+          </div>
         </div>
       </header>
-
+      {/* Debug panel removed to avoid layout disruption */}
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {/* ...existing grid/token UI... */}
@@ -878,50 +1188,18 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           <div className="lg:col-span-1">
             <div className="space-y-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9945FF]" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search tokens..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-card/40 text-foreground placeholder:text-muted-foreground focus:outline-none smooth-transition border-2 border-[#9945FF] rounded-xl"
-                  style={{ backgroundColor: "rgba(20, 20, 30, 0.18)" }}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card/40 text-foreground placeholder:text-muted-foreground focus:outline-none smooth-transition"
+                  style={{ backgroundColor: "rgba(20, 20, 30, 0.18)", borderRadius: '0.75rem', boxShadow: '0 0 0 2px #9945FF' }}
                 />
               </div>
               {/* Filter */}
-              <div className="flex items-center gap-2">
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-full min-w-[140px] bg-card/40 border-2 border-[#9945FF] focus:ring-[#9945FF]/40 focus:border-[#9945FF]/40 text-foreground rounded-lg shadow-sm flex items-center gap-2">
-                    <span className="flex items-center">
-                      <Filter className="w-4 h-4 text-[#9945FF] mr-2" />
-                      <SelectValue />
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="bg-card/90 border-2 border-[#9945FF]/30 text-foreground rounded-lg shadow-lg">
-                    <SelectItem value="all">Filter: All</SelectItem>
-                    <SelectItem value="burnable">Burnable</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {/* Manage Tokens Button */}
-              <button
-                type="button"
-                className="w-full mt-3 py-2 rounded-lg border-2 border-[#9945FF] text-[#9945FF] font-semibold bg-card/40 hover:bg-[#9945FF]/10 transition flex items-center justify-center gap-2"
-                onClick={() => setShowManageModal(true)}
-              >
-                <Settings className="w-5 h-5" />
-                Manage Tokens
-              </button>
-              {/* Token List */}
-              <TokenList tokens={filteredTokens.filter(t => tokenVisibility[t.symbol] !== false)} selectedToken={selectedToken} onSelectToken={setSelectedToken} />
-      {showManageModal && (
-        <TokenManageModal
-          tokens={manageTokens}
-          onClose={() => setShowManageModal(false)}
-          onToggle={handleToggleToken}
-        />
-      )}
-
+              <TokenList tokens={filteredTokens} selectedToken={selectedToken} onSelectToken={setSelectedToken} />
             </div>
           </div>
           {/* Right Column - Token Detail */}

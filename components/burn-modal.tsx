@@ -1,39 +1,44 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useToast } from "../hooks/use-toast"
 import { useIsMobile } from "./ui/use-mobile"
 import { useWallet } from '@solana/wallet-adapter-react';
 import { X } from "lucide-react"
+import { Spinner } from "./ui/spinner"
 
 interface BurnModalProps {
   token: any
   // method: 'instruction' = burn via SPL Burn instruction, 'send' = send to death wallet address
-  onConfirm: (amount: number, method?: 'instruction' | 'send') => void
+  onConfirm: (amount: number, method?: 'instruction' | 'send', image?: string) => Promise<void> | void
   onCancel: () => void
   isDev?: boolean
 }
 
-export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
+export function BurnModal({ token, onConfirm, onCancel, isDev }: BurnModalProps) {
   const [amount, setAmount] = useState("")
   const [isChecked, setIsChecked] = useState(false)
   const [method, setMethod] = useState<'instruction' | 'send'>('instruction')
   const [copied, setCopied] = useState(false)
   const [metaReady, setMetaReady] = useState<boolean>(Boolean((token as any)?.meta));
+  const [isProcessing, setIsProcessing] = useState(false)
   const toast = useToast();
-
+  const { publicKey } = useWallet();
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const amountInputRef = useRef<HTMLInputElement | null>(null);
+
   // Enrich token metadata when modal mounts (logoURI / name / symbol)
   // This duplicates the small enrichment from token-detail but ensures the modal
   // shows the icon immediately even if parent hasn't enriched yet.
   useEffect(() => {
     let cancelled = false;
-    // Lock body scroll while modal is open
+  // Lock body scroll while modal is open
     const prevOverflow = typeof document !== 'undefined' ? document.body.style.overflow : undefined;
     try { if (typeof document !== 'undefined') document.body.style.overflow = 'hidden'; } catch (e) {}
     (async () => {
@@ -58,8 +63,6 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
     return () => { cancelled = true; try { if (typeof document !== 'undefined' && prevOverflow !== undefined) document.body.style.overflow = prevOverflow; } catch (e) {} };
   }, [token.mintAddress]);
 
-  const { publicKey } = useWallet();
-  // derive dev status from metadata when prop not explicitly provided
   const normalize = (v: any) => (typeof v === 'string' ? v.trim() : (v ? String(v).trim() : ''));
   const derivedIsDev = (() => {
     try {
@@ -96,35 +99,115 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
     else setMethod('send');
   }, [derivedIsDev]);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!isChecked) {
       toast.toast({
-        title: 'Checklist belum dicentang',
-        description: 'Anda harus menyetujui risiko sebelum melakukan burn token.'
+        title: 'Checklist not checked',
+        description: 'You must acknowledge the risks before burning tokens.'
       });
       return;
     }
     const amt = amount ? Number.parseFloat(amount) : 0;
-    onConfirm(amt, method);
+    // determine image to pass to parent so success screen can show it
+    const image = (token as any)?.logoURI ?? (token as any)?.icon ?? (token as any)?.meta?.logoURI ?? undefined;
+    // install temporary global handlers to catch wallet adapters that emit
+    // errors or unhandled rejections outside of the returned Promise. This
+    // prevents the Next.js dev overlay from appearing when a user cancels a
+    // signature in some wallets.
+    const isUserRejection = (maybeErr: any) => {
+      try {
+        if (!maybeErr) return false;
+        const msg = typeof maybeErr === 'string' ? maybeErr : (maybeErr.message ?? (maybeErr.toString && maybeErr.toString()) ?? '');
+        const name = String(maybeErr?.name ?? '').toLowerCase();
+        const code = maybeErr?.code ?? maybeErr?.error?.code ?? null;
+        const s = String(msg || '').toLowerCase();
+        if (s.includes('rejected') || s.includes('user rejected') || s.includes('user canceled') || s.includes('user cancelled')) return true;
+        if (name.includes('walletsigntransactionerror') || name.includes('userrejected')) return true;
+        if (code === 4001 || String(code).toLowerCase().includes('user_rejected')) return true;
+        return false;
+      } catch (e) { return false; }
+    };
+
+    const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
+      try {
+        const reason: any = (ev && (ev as any).reason) || null;
+        try { console.debug('[BurnModal] unhandledrejection:', reason); } catch (e) {}
+        if (isUserRejection(reason)) {
+          try { ev.preventDefault(); } catch (e) {}
+          try { toast.toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+        }
+      } catch (e) {}
+    };
+    const onWindowError = (ev: ErrorEvent) => {
+      try {
+        const err: any = (ev && (ev as any).error) || null;
+        try { console.debug('[BurnModal] window.error:', { err, message: ev?.message }); } catch (e) {}
+        if (isUserRejection(err ?? ev?.message)) {
+          try { ev.preventDefault(); } catch (e) {}
+          try { toast.toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+        }
+      } catch (e) {}
+    };
+
+    try {
+      setIsProcessing(true);
+      try { window.addEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
+      try { window.addEventListener('error', onWindowError as any); } catch (e) {}
+      // allow parent to be async and await it so modal can show progress
+      await onConfirm(amt, method, image as any);
+    } catch (e) {
+      // parent may throw; surface a toast
+      try {
+        if (isUserRejection(e)) {
+          try { toast.toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (ee) {}
+        } else {
+          try { toast.toast({ title: 'Burn failed', description: String(e) }); } catch (ee) {}
+        }
+      } catch (ee) {}
+    } finally {
+      // leave listeners alive briefly to catch delayed adapter errors
+      try {
+        setTimeout(() => {
+          try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
+          try { window.removeEventListener('error', onWindowError as any); } catch (e) {}
+        }, 1200);
+      } catch (e) {
+        try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (ee) {}
+        try { window.removeEventListener('error', onWindowError as any); } catch (ee) {}
+      }
+      // if modal remains mounted, stop processing indicator (if parent closes modal this is noop)
+      try { setIsProcessing(false); } catch (e) {}
+    }
   }
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div
-  className="w-full max-w-md rounded-3xl backdrop-blur-xl border-2 p-8 space-y-6 smooth-transition shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        ref={modalRef}
+        onClick={(e) => {
+          // if clicking on backdrop (not inside modal content), close only when not processing
+          if (e.target === e.currentTarget && !isProcessing) onCancel();
+        }}
+        tabIndex={-1}
+        className="w-full max-w-md rounded-3xl backdrop-blur-xl border-2 p-0 smooth-transition shadow-2xl max-h-[90vh] flex flex-col"
         style={{ background: "rgba(20, 20, 30, 0.55)", borderImage: "linear-gradient(90deg, #9945FF 0%, #14F195 100%) 1" }}
       >
         {/* Header */}
   <div className="flex items-center justify-between pb-4 border-b border-[#9945FF]/40">
           <h2 className="text-2xl font-bold text-foreground tracking-tight">Burn {token.symbol}</h2>
           <button
-            onClick={onCancel}
-            className="p-2 hover:bg-[#9945FF]/20 rounded-lg smooth-transition text-muted-foreground hover:text-foreground"
+            onClick={() => { if (!isProcessing) onCancel(); }}
+            disabled={isProcessing}
+            className="p-2 hover:bg-[#9945FF]/20 rounded-lg smooth-transition text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
             <X className="w-5 h-5" />
-          </button>
-        </div>
+          </button> 
+        </div> 
 
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Token Icon */}
         <div className="flex justify-center">
           <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-[#9945FF]/30 to-[#14F195]/20 flex items-center justify-center text-5xl border-2 border-[#9945FF] overflow-hidden">
@@ -138,6 +221,7 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
           </div>
         </div>
 
+        
         {/* Mint Address */}
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground font-medium">Mint Address</p>
@@ -153,8 +237,10 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
           <input
             type="number"
             value={amount}
+            ref={amountInputRef}
             onChange={(e) => setAmount(e.target.value)}
             className="w-full p-3 rounded-lg bg-[#9945FF]/10 border-2 border-[#9945FF] focus:border-[#14F195] text-foreground outline-none"
+            disabled={isProcessing}
           />
           {/* Slider Persentase */}
           <div className="flex items-center gap-3 mt-2">
@@ -201,8 +287,9 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
           <input
             type="checkbox"
             checked={isChecked}
-            onChange={(e) => setIsChecked(e.target.checked)}
+              onChange={(e) => setIsChecked(e.target.checked)}
             className="mr-2 accent-orange-500"
+              disabled={isProcessing}
           />
           <p className="text-xs text-muted-foreground font-medium">I understand the risks</p>
         </div>
@@ -213,16 +300,16 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => { if (derivedIsDev) setMethod('instruction'); }}
-              disabled={!derivedIsDev || !metaReady}
+              onClick={() => { if (derivedIsDev && !isProcessing) setMethod('instruction'); }}
+              disabled={!derivedIsDev || !metaReady || isProcessing}
               className={`flex-1 p-3 rounded-lg border ${method === 'instruction' ? 'border-[#14F195] bg-[#14F195]/10' : 'border-[#9945FF] bg-transparent'} text-sm font-medium ${(!derivedIsDev || !metaReady) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               Burn via Instruction
             </button>
             <button
               type="button"
-              onClick={() => { if (!derivedIsDev) setMethod('send'); }}
-              disabled={derivedIsDev || !metaReady}
+              onClick={() => { if (!derivedIsDev && !isProcessing) setMethod('send'); }}
+              disabled={derivedIsDev || !metaReady || isProcessing}
               className={`flex-1 p-3 rounded-lg border ${method === 'send' ? 'border-[#14F195] bg-[#14F195]/10' : 'border-[#9945FF] bg-transparent'} text-sm font-medium ${(derivedIsDev || !metaReady) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               Send to Death Wallet
@@ -245,8 +332,9 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
                 <code className="flex-1 text-xs font-mono text-foreground break-all">1nc1nerator11111111111111111111111111111111</code>
                 <button
                   type="button"
-                  onClick={() => copyToClipboard('1nc1nerator11111111111111111111111111111111')}
+                  onClick={() => !isProcessing && copyToClipboard('1nc1nerator11111111111111111111111111111111')}
                   className="text-xs px-2 py-1 rounded bg-[#9945FF]/10 hover:bg-[#9945FF]/20"
+                  disabled={isProcessing}
                 >
                   {copied ? 'Copied' : 'Copy'}
                 </button>
@@ -263,21 +351,33 @@ export function BurnModal({ token, onConfirm, onCancel }: BurnModalProps) {
           )}
         </div>
 
+        </div>
+
         {/* Actions */}
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="p-6 border-t border-[#9945FF]/20">
+          <div className="flex justify-end gap-4">
           <button
             onClick={onCancel}
+            disabled={isProcessing}
             className="w-32 py-3 rounded-lg font-semibold border border-[#9945FF] bg-gradient-to-r from-[#9945FF]/20 to-[#14F195]/20 text-[#14F195] hover:bg-[#14F195]/30 smooth-transition"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!isChecked || !amount || isNaN(Number(amount)) || Number(amount) <= 0}
-            className={`w-32 py-3 rounded-lg font-semibold border border-[#9945FF] bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white hover:opacity-90 smooth-transition ${(!isChecked || !amount || isNaN(Number(amount)) || Number(amount) <= 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            disabled={isProcessing || !isChecked || !amount || isNaN(Number(amount)) || Number(amount) <= 0}
+            className={`w-32 py-3 rounded-lg font-semibold border border-[#9945FF] bg-gradient-to-r from-[#9945FF] to-[#14F195] text-white hover:opacity-90 smooth-transition ${(!isChecked || !amount || isNaN(Number(amount)) || Number(amount) <= 0 || isProcessing) ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            Burn
+            {isProcessing ? (
+              <div className="flex items-center justify-center gap-2">
+                <Spinner className="w-4 h-4 text-white animate-spin" />
+                <span>Processing...</span>
+              </div>
+            ) : (
+              'Burn'
+            )}
           </button>
+          </div>
         </div>
       </div>
     </div>

@@ -7,11 +7,12 @@ import { useWallet } from "@solana/wallet-adapter-react";
 export default function useWalletChangeCleanup() {
   const { publicKey, wallet } = useWallet();
   const prev = useRef<string | null>(null);
+  const initializedRef = useRef(false);
 
   // central cleanup routine used by both event listeners and publicKey watcher
   function doCleanup(newPubKey: string | null) {
+    // If nothing changed, do nothing
     if (prev.current === newPubKey) {
-      prev.current = newPubKey;
       return;
     }
 
@@ -31,12 +32,35 @@ export default function useWalletChangeCleanup() {
     } catch (e) {
       // ignore
     }
+    // Also write a storage key so other tabs can detect wallet change via 'storage' event
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try { sessionStorage.setItem('devlation_wallet_pubkey', String(newPubKey ?? '')); } catch (e) {}
+      }
+    } catch (e) {}
 
     prev.current = newPubKey;
   }
 
   useEffect(() => {
     const curr = publicKey ? publicKey.toBase58() : null;
+    // On first mount, initialize prev.current but do not dispatch events.
+    // Subsequent changes will trigger cleanup.
+    if (!initializedRef.current) {
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          const stored = sessionStorage.getItem('devlation_wallet_pubkey');
+          prev.current = stored !== null ? (stored === '' ? null : stored) : curr;
+        } else {
+          prev.current = curr;
+        }
+      } catch (e) {
+        prev.current = curr;
+      }
+      initializedRef.current = true;
+      return;
+    }
+
     doCleanup(curr);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicKey]);

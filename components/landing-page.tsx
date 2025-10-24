@@ -51,6 +51,8 @@ import { Flame, Zap, Shield, ArrowRight, Copy as CopyIcon, HelpCircle, Download,
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useRouter } from "next/navigation";
 import LogoSlider from "./logo-slider";
+import PartnershipSection from "./partnership-section";
+import CallToActionSection from "./call-to-action-section";
 import { useEffect, useState } from "react";
 // Logo links from env
 const logoLinks: Record<string, string> = {
@@ -125,11 +127,27 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
     let cancelled = false;
     async function fetchBalance() {
       if (publicKey && connection) {
+        const safeFetchJSON = async (path: string, timeout = 8000) => {
+          const controller = new AbortController();
+          const id = setTimeout(() => controller.abort(), timeout);
+          try {
+            try {
+              const res = await fetch(path, { signal: controller.signal });
+              clearTimeout(id);
+              const txt = await res.text().catch(() => null);
+              let parsed = null;
+              try { parsed = txt ? JSON.parse(txt) : null } catch (e) { parsed = txt; }
+              return { ok: res.ok, status: res.status, body: parsed };
+            } catch (fetchErr) {
+              clearTimeout(id);
+              return { ok: false, status: null, body: null, error: String(fetchErr) } as any;
+            }
+          } finally { clearTimeout(id); }
+        };
         try {
-          const res = await fetch(`/api/solana-balance?publicKey=${publicKey.toBase58()}`);
-          const data = await res.json();
+          const res = await safeFetchJSON(`/api/solana-balance?publicKey=${publicKey.toBase58()}`);
           if (!cancelled) {
-            if (data.sol !== undefined) setSolBalance(data.sol);
+            if (res.ok && res.body && res.body.sol !== undefined) setSolBalance(res.body.sol);
             else setSolBalance(null);
           }
         } catch {
@@ -143,15 +161,25 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
     return () => { cancelled = true; };
   }, [publicKey, connection]);
 
+
   return (
-  <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95 overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-background/95 overflow-hidden flex flex-col relative">
       {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-  <div className="absolute top-20 right-10 w-72 h-72 bg-[#9945FF]/10 rounded-full blur-3xl animate-pulse" />
-        <div
-          className="absolute bottom-20 left-10 w-96 h-96 bg-[#9945FF]/10 rounded-full blur-3xl animate-pulse"
-          style={{ animationDelay: "1s" }}
-        />
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        {/* Atas */}
+        <div className="absolute top-20 right-10 w-72 h-72 bg-[#9945FF]/25 rounded-full blur-3xl animate-pulse" />
+        {/* Tengah kiri */}
+        <div className="absolute left-[25%] top-[38%] -translate-x-1/2 -translate-y-1/2 w-[340px] h-[180px] bg-[#9945FF]/35 rounded-full blur-[100px] animate-pulse" style={{animationDelay:'1.2s', opacity:0.82}} />
+        {/* Tengah kanan */}
+        <div className="absolute left-[70%] top-[45%] -translate-x-1/2 -translate-y-1/2 w-[320px] h-[160px] bg-[#14F195]/35 rounded-full blur-[90px] animate-pulse" style={{animationDelay:'1.4s', opacity:0.75}} />
+        {/* Tengah bawah */}
+        <div className="absolute left-[50%] top-[70%] -translate-x-1/2 -translate-y-1/2 w-[400px] h-[200px] bg-[#9945FF]/25 rounded-full blur-[110px] animate-pulse" style={{animationDelay:'1.7s', opacity:0.7}} />
+  {/* Bawah kiri */}
+  <div className="absolute left-10 bottom-[-60px] w-[320px] h-[160px] bg-[#14F195]/20 rounded-full blur-[90px] animate-pulse" style={{animationDelay:'2s', opacity:0.6}} />
+  {/* Bawah tengah (sekarang ungu, lebih naik & agak kanan) */}
+  <div className="absolute left-[58%] -translate-x-1/2 bottom-[180px] w-[260px] h-[130px] bg-[#9945FF]/30 rounded-full blur-[80px] animate-pulse" style={{animationDelay:'2.3s', opacity:0.7}} />
+  {/* Bawah kanan */}
+  <div className="absolute right-10 bottom-[-60px] w-[220px] h-[120px] bg-[#9945FF]/20 rounded-full blur-[70px] animate-pulse" style={{animationDelay:'2.5s', opacity:0.6}} />
       </div>
 
   <div className="relative z-10 flex-1">
@@ -190,7 +218,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
             <div className="space-y-8">
               <div className="space-y-4">
                 <AnimatedHeroTitle />
-                <p className="text-xl text-muted-foreground leading-relaxed">
+                <p className="text-base text-muted-foreground leading-relaxed">
                   Securely and permanently remove tokens from circulation. Reduce supply, increase scarcity, and
                   strengthen your project's tokenomics.
                 </p>
@@ -255,17 +283,19 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                   className="px-8 py-4 rounded-lg border-2 border-[#9945FF] text-[#9945FF] font-semibold flex items-center gap-2 bg-transparent hover:bg-[#9945FF]/90 hover:text-background hover:border-[#9945FF] transition-all duration-200 w-full sm:w-auto justify-center shadow-sm"
                   style={{ minWidth: 140 }}
                 >
-                  BUY $DMT
+                  BUY $DEVF
                 </a>
                 <a
-                  href="/docs/project-docs.pdf"
-                  download
+                  href="https://whitepaper.devflation.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="px-4 py-4 rounded-lg border-2 border-[#9945FF] text-[#9945FF] bg-transparent hover:bg-[#9945FF]/90 hover:text-background hover:border-[#9945FF] transition-all duration-200 flex items-center justify-center shadow-sm"
                   style={{ minWidth: 48, minHeight: 48 }}
-                  aria-label="Docs"
-                  title="Docs"
+                  aria-label="Whitepaper"
+                  title="Whitepaper"
                 >
                   <Book className="w-6 h-6" />
+                  <span className="ml-2 text-base font-semibold block sm:hidden">Whitepaper</span>
                 </a>
               </div>
             </div>
@@ -278,7 +308,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               >
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center space-y-6 relative w-full h-full flex flex-col items-center justify-center">
-                    {/* Partikel api di seluruh card */}
+                    {/* Flame particles across the card */}
                     <div className="absolute inset-0 pointer-events-none z-0">
                       {[...Array(8)].map((_, i) => {
                         const angle = Math.random() * 2 * Math.PI;
@@ -333,19 +363,20 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           <CopyNotificationWrapper />
           <section className="w-full mx-auto mt-12 mb-20 px-0">
             <div
-                  className="w-full rounded-2xl border-2 border-[#9945FF] backdrop-blur-xl shadow-lg p-6 flex flex-col gap-4 relative overflow-hidden"
-                  style={{ background: 'linear-gradient(90deg, rgba(153,69,255,0.2) 10%, rgba(20,241,149,0.2) 90%)' }}
+                  className="w-full rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col gap-4 relative overflow-hidden"
+                  style={{ background: 'rgba(24,24,27,0.35)' }}
                 >
                 {/* No shimmer or highlight animation on card background */}
-              <h3 className="text-lg font-bold text-foreground mb-1 relative z-10">Official Contract Address</h3>
+              <h3 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2 relative z-10">Official Contract Address</h3>
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 relative z-10">
                 <CopyableAddress />
-                <div className="relative">
+                {/* Mobile: flex-row for buttons, Desktop: only Solscan */}
+                <div className="flex flex-row gap-2 w-full sm:w-auto">
                   <a
                     href="https://solscan.io/address/9xQeWvG816bUx9EPfB6p8b6E3bQ1r6Q1Q1Q1Q1"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 rounded-lg bg-[#9945FF] hover:bg-[#14F195] text-background font-semibold text-sm shadow transition h-10 overflow-hidden relative"
+                    className="inline-flex items-center gap-2 px-4 rounded-lg bg-[#9945FF] hover:bg-[#14F195] text-background font-semibold text-sm shadow transition h-10 overflow-hidden relative w-full sm:w-auto"
                   >
                     {/* Animated highlight overlay */}
                     <span className="absolute -left-20 top-0 h-full w-24 pointer-events-none card-highlight-anim" style={{ zIndex: 1 }} />
@@ -355,6 +386,19 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                       </svg>
                       <span className="leading-none ml-1">View on Solscan</span>
                     </span>
+                  </a>
+                  {/* Mobile only: Buy on pump.fun, same style/size as Solscan */}
+                  <a
+                    href={logoLinks.pumpfun || "https://pump.fun/"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 rounded-lg bg-[#14F195] text-background font-semibold text-sm shadow transition h-10 overflow-hidden relative w-full sm:w-auto block sm:hidden"
+                    style={{ minWidth: 0 }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                       <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75V6A2.25 2.25 0 0 0 15 3.75h-6A2.25 2.25 0 0 0 6.75 6v12A2.25 2.25 0 0 0 9 20.25h6A2.25 2.25 0 0 0 17.25 18v-.75M15.75 8.25 20.25 3.75m0 0v4.5m0-4.5h-4.5" />
+                    </svg>
+                    <span className="leading-none ml-1">Pump.fun</span>
                   </a>
                 </div>
               </div>
@@ -379,8 +423,8 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               `}</style>
             </div>
             
-            <div className="w-full rounded-2xl p-6 flex flex-col gap-4 mt-4">
-              <h3 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
+            <div className="w-full flex flex-col gap-4 mt-4">
+              <h3 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2 mt-8">
                 <svg className="w-7 h-7 text-[#9945FF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 Integrated Market
               </h3>
@@ -450,7 +494,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           </section>
 
           {/* CEX Logo Section */}
-          <section className="w-full rounded-2xl p-6 flex flex-col gap-2 mt-0" style={{marginTop: '-80px'}}>
+          <section className="w-full flex flex-col gap-2 mt-0 pt-10" style={{marginTop: '-80px'}}>
             <h3 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
               <svg className="w-7 h-7 text-[#9945FF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               Soon Listed CEX
@@ -514,7 +558,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
             </div>
           </section>
     {/* How to Use Section */}
-    <section className="w-full max-w-7xl mx-auto mt-10 mb-20">
+  <section className="w-full max-w-7xl mx-auto mt-10 mb-20 pt-10">
       <h3 className="text-3xl font-bold text-foreground mb-2 flex items-center gap-2">
         <HelpCircle className="w-7 h-7 text-[#9945FF]" />
         How to Use
@@ -522,7 +566,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
       <p className="text-muted-foreground mb-8 text-base">Follow these simple steps to burn your Solana tokens securely and instantly.</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Step 1 */}
-        <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col items-center text-center">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col items-center text-center glass-card-howto" style={{ background: 'rgba(24,24,27,0.35)' }}>
           <div className="w-14 h-14 rounded-full bg-[#9945FF]/10 flex items-center justify-center mb-4">
             <Shield className="w-8 h-8 text-[#9945FF]" />
           </div>
@@ -530,7 +574,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           <p className="text-muted-foreground text-sm">Connect your Solana wallet (Phantom, Solflare, etc) to get started.</p>
         </div>
         {/* Step 2 */}
-        <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col items-center text-center">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col items-center text-center glass-card-howto" style={{ background: 'rgba(24,24,27,0.35)' }}>
           <div className="w-14 h-14 rounded-full bg-[#9945FF]/10 flex items-center justify-center mb-4">
             <Flame className="w-8 h-8 text-[#9945FF]" />
           </div>
@@ -538,7 +582,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           <p className="text-muted-foreground text-sm">Choose the SPL token you want to burn from your wallet list.</p>
         </div>
         {/* Step 3 */}
-        <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col items-center text-center">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col items-center text-center glass-card-howto" style={{ background: 'rgba(24,24,27,0.35)' }}>
           <div className="w-14 h-14 rounded-full bg-[#9945FF]/10 flex items-center justify-center mb-4">
             <Zap className="w-8 h-8 text-[#9945FF]" />
           </div>
@@ -546,6 +590,14 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           <p className="text-muted-foreground text-sm">Confirm and burn your tokens in one secure transaction.</p>
         </div>
       </div>
+      <style>{`
+        .glass-card-howto {
+          box-shadow: none;
+          border-radius: 1.25rem;
+          /* border: none;  HAPUS agar border Tailwind muncul */
+          backdrop-filter: blur(18px);
+        }
+      `}</style>
     </section>
 
           {/* Roadmap Section */}
@@ -556,7 +608,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
     </h3>
   <p className="text-muted-foreground mb-8 text-base">Development Milestones of Devflation: From Foundation to Ecosystem Expansion</p>
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-      <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col glass-card-roadmap" style={{ background: 'rgba(24,24,27,0.35)' }}>
         <span className="text-[#9945FF] font-bold text-lg mb-2">Q4 2025 — Foundation Build</span>
         <ul className="mt-2 space-y-2">
           <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Launch MVP Platform (Manual Burn Feature)</li>
@@ -565,59 +617,71 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Telegram Burn Notification Bot</li>
         </ul>
       </div>
-      <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col glass-card-roadmap" style={{ background: 'rgba(24,24,27,0.35)' }}>
         <span className="text-[#9945FF] font-bold text-lg mb-2">Q1 2026 — Automation & CEX Tier 3 Listing</span>
         <ul className="mt-2 space-y-2">
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Auto Burn System (time & fee-based)</li>
-                    <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>X.com Burn Notification</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Fee Distribution Mechanism (Ops, Pool, Reward)</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Listing on Tier 3 CEX</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Auto Burn System (time & fee-based)</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>X.com Burn Notification</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Fee Distribution Mechanism (Ops, Pool, Reward)</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Listing on Tier 3 CEX</li>
         </ul>
       </div>
-      <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col glass-card-roadmap" style={{ background: 'rgba(24,24,27,0.35)' }}>
         <span className="text-[#9945FF] font-bold text-lg mb-2">Q2 2026 — Utility Expansion & CEX Tier 2–1 Listing</span>
         <ul className="mt-2 space-y-2">
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>VIP Signal System (Premium Analytics)</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>API & SDK for Developers</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Community Integration (X / Telegram)</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Listing on Tier 2 & Tier 1 CEX</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>VIP Signal System (Premium Analytics)</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>API & SDK for Developers</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Community Integration (X / Telegram)</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Listing on Tier 2 & Tier 1 CEX</li>
         </ul>
       </div>
-      <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col glass-card-roadmap" style={{ background: 'rgba(24,24,27,0.35)' }}>
         <span className="text-[#9945FF] font-bold text-lg mb-2">Q3 2026 — Cross-Chain Expansion</span>
         <ul className="mt-2 space-y-2">
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Dev Reward Pool v2</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Multi-Chain Support (Base, BNB, Arbitrum)</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Dev Reward Pool v2</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Multi-Chain Support (Base, BNB, Arbitrum)</li>
         </ul>
       </div>
-      <div className="rounded-2xl border border-border bg-background/80 p-6 shadow flex flex-col">
+  <div className="rounded-2xl border border-white/20 backdrop-blur-xl shadow-none p-6 flex flex-col glass-card-roadmap" style={{ background: 'rgba(24,24,27,0.35)' }}>
+    <style>{`
+      .glass-card-roadmap {
+        box-shadow: none;
+        border-radius: 1.25rem;
+        /* border: none;  HAPUS agar border Tailwind muncul */
+        backdrop-filter: blur(18px);
+      }
+    `}</style>
         <span className="text-[#9945FF] font-bold text-lg mb-2">Q4 2026 — Ecosystem Growth</span>
         <ul className="mt-2 space-y-2">
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Launchpad Integration (Magic Eden, PinkSale)</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Devflation Analytics v2 Dashboard</li>
-          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Token Utility Upgrade & Ecosystem Partnerships</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Launchpad Integration (Magic Eden, PinkSale)</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Devflation Analytics v2 Dashboard</li>
+          <li className="flex items-start gap-2 text-foreground"><svg className="w-5 h-5 text-[#9945FF] mt-0.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="#9945FF" strokeWidth="2" fill="none"/><circle cx="12" cy="12" r="4" fill="none"/></svg>Token Utility Upgrade & Ecosystem Partnerships</li>
         </ul>
       </div>
     </div>
   </section>
-  
-   
+
+  {/* Partnership Section */}
+
+  <PartnershipSection />
+  <CallToActionSection />
         </main>
       </div>
       {/* Footer */}
-      <footer className="w-full border-t border-border/30 bg-background/80 backdrop-blur-xl py-8 mt-10">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <img src="/devflation.png" alt="Devflation Logo" className="h-6 w-auto" />
-            <span>© {new Date().getFullYear()} Devflation. All rights reserved.</span>
+      <footer className="w-full border-t border-border/30 bg-background/80 backdrop-blur-xl py-8 mt-4 relative z-10">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center sm:justify-between gap-2">
+          {/* Mobile: center logo and stack text, Desktop: horizontal */}
+          <div className="flex flex-col items-center w-full sm:w-auto">
+            <img src="/devflation.png" alt="Devflation Logo" className="h-8 w-auto mb-1 sm:mb-0" />
+            <span className="text-muted-foreground text-sm text-center block sm:hidden">© 2025 Devflation. All rights reserved.</span>
           </div>
-          <div className="flex items-center gap-4">
-            <a href="https://twitter.com/devflation" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">X.com</a>
-            <a href="https://github.com/devflation" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">GitHub</a>
-            <a href="https://x.com/devflation" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">X Community</a>
+          <div className="flex items-center gap-4 mb-2 sm:mb-0">
+            <a href="https://x.com/Devflation" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">X.com</a>
+            <a href="https://github.com/users/0xBitWishper/projects/3/views/1" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">GitHub</a>
             <a href="https://t.me/devflation" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">Telegram</a>
-            <a href="https://discord.gg/devflation" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">Discord</a>
+            <a href="https://discord.gg/3s5RjJk3jS" target="_blank" rel="noopener noreferrer" className="text-[#9945FF] hover:underline text-sm">Discord</a>
           </div>
+          <span className="text-muted-foreground text-sm text-center hidden sm:block">© 2025 Devflation. All rights reserved.</span>
         </div>
       </footer>
     </div>
