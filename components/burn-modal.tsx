@@ -110,14 +110,71 @@ export function BurnModal({ token, onConfirm, onCancel, isDev }: BurnModalProps)
     const amt = amount ? Number.parseFloat(amount) : 0;
     // determine image to pass to parent so success screen can show it
     const image = (token as any)?.logoURI ?? (token as any)?.icon ?? (token as any)?.meta?.logoURI ?? undefined;
+    // install temporary global handlers to catch wallet adapters that emit
+    // errors or unhandled rejections outside of the returned Promise. This
+    // prevents the Next.js dev overlay from appearing when a user cancels a
+    // signature in some wallets.
+    const isUserRejection = (maybeErr: any) => {
+      try {
+        if (!maybeErr) return false;
+        const msg = typeof maybeErr === 'string' ? maybeErr : (maybeErr.message ?? (maybeErr.toString && maybeErr.toString()) ?? '');
+        const name = String(maybeErr?.name ?? '').toLowerCase();
+        const code = maybeErr?.code ?? maybeErr?.error?.code ?? null;
+        const s = String(msg || '').toLowerCase();
+        if (s.includes('rejected') || s.includes('user rejected') || s.includes('user canceled') || s.includes('user cancelled')) return true;
+        if (name.includes('walletsigntransactionerror') || name.includes('userrejected')) return true;
+        if (code === 4001 || String(code).toLowerCase().includes('user_rejected')) return true;
+        return false;
+      } catch (e) { return false; }
+    };
+
+    const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
+      try {
+        const reason: any = (ev && (ev as any).reason) || null;
+        try { console.debug('[BurnModal] unhandledrejection:', reason); } catch (e) {}
+        if (isUserRejection(reason)) {
+          try { ev.preventDefault(); } catch (e) {}
+          try { toast.toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+        }
+      } catch (e) {}
+    };
+    const onWindowError = (ev: ErrorEvent) => {
+      try {
+        const err: any = (ev && (ev as any).error) || null;
+        try { console.debug('[BurnModal] window.error:', { err, message: ev?.message }); } catch (e) {}
+        if (isUserRejection(err ?? ev?.message)) {
+          try { ev.preventDefault(); } catch (e) {}
+          try { toast.toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+        }
+      } catch (e) {}
+    };
+
     try {
       setIsProcessing(true);
+      try { window.addEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
+      try { window.addEventListener('error', onWindowError as any); } catch (e) {}
       // allow parent to be async and await it so modal can show progress
       await onConfirm(amt, method, image as any);
     } catch (e) {
       // parent may throw; surface a toast
-      try { toast.toast({ title: 'Burn failed', description: String(e) }); } catch (ee) {}
+      try {
+        if (isUserRejection(e)) {
+          try { toast.toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (ee) {}
+        } else {
+          try { toast.toast({ title: 'Burn failed', description: String(e) }); } catch (ee) {}
+        }
+      } catch (ee) {}
     } finally {
+      // leave listeners alive briefly to catch delayed adapter errors
+      try {
+        setTimeout(() => {
+          try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
+          try { window.removeEventListener('error', onWindowError as any); } catch (e) {}
+        }, 1200);
+      } catch (e) {
+        try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (ee) {}
+        try { window.removeEventListener('error', onWindowError as any); } catch (ee) {}
+      }
       // if modal remains mounted, stop processing indicator (if parent closes modal this is noop)
       try { setIsProcessing(false); } catch (e) {}
     }
@@ -164,6 +221,7 @@ export function BurnModal({ token, onConfirm, onCancel, isDev }: BurnModalProps)
           </div>
         </div>
 
+        
         {/* Mint Address */}
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground font-medium">Mint Address</p>

@@ -717,6 +717,49 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
       }
       // Aktifkan mode TX agar provider pakai endpoint TX
       if (typeof window !== 'undefined') (window as any).txMode = true;
+      // Helpers declared at function scope so outer catch/finally can access them
+      const isUserRejection = (maybeErr: any) => {
+        try {
+          if (!maybeErr) return false;
+          const msg = typeof maybeErr === 'string' ? maybeErr : (maybeErr?.message ?? (maybeErr?.toString && maybeErr.toString()) ?? '');
+          const name = String(maybeErr?.name ?? '').toLowerCase();
+          const code = maybeErr?.code ?? maybeErr?.error?.code ?? maybeErr?.status ?? null;
+          const s = String(msg || '').toLowerCase();
+          if (s.includes('rejected') || s.includes('user rejected') || s.includes('user rejected the request') || s.includes('user canceled') || s.includes('user cancelled') || s.includes('cancelled') || s.includes('cancelled by user')) return true;
+          if (name.includes('walletsigntransactionerror') || name.includes('userrejectedrequest') || name.includes('walleterror') || name.includes('walletcancel') || name.includes('walletcancelled') || name.includes('userrejected')) return true;
+          if (code === 4001 || code === 1 || String(code).toLowerCase().includes('user_rejected') || String(code).toLowerCase().includes('userrejected') || String(code).toLowerCase().includes('rejected')) return true;
+          return false;
+        } catch (e) { return false; }
+      };
+
+      const safeCall = async (fn: () => any): Promise<{ ok: true; value: any } | { ok: false; err: any }> => {
+        try {
+          const res = fn();
+          if (res && typeof res.then === 'function') {
+            try {
+              const v = await res;
+              return { ok: true as const, value: v };
+            } catch (err: any) {
+              return { ok: false as const, err };
+            }
+          }
+          return { ok: true as const, value: res };
+        } catch (err: any) {
+          return { ok: false as const, err };
+        }
+      };
+
+      const getErrMessage = (e: any) => {
+        try {
+          if (!e && e !== 0) return '';
+          if (typeof e === 'string') return e;
+          if (typeof e === 'number') return String(e);
+          if (e instanceof Error && e.message) return String(e.message);
+          if (e && typeof e.message === 'string') return e.message;
+          if (e && typeof e.toString === 'function') return e.toString();
+          try { return JSON.stringify(e); } catch (je) { return String(e); }
+        } catch (outer) { return String(e); }
+      };
       try {
         const mint = new PublicKey(burnModalToken.mintAddress);
         const owner = publicKey;
@@ -781,63 +824,119 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
           }
         } catch (e) {}
 
-        // Attempt to sign with wallet adapter. If adapter doesn't provide signTransaction
-        // or user rejects the signature, show a friendly toast and abort gracefully.
+
         // Some wallet adapters may emit unhandled rejections or even synchronous errors
         // that bypass local try/catch; install temporary global handlers to convert
-        // those into a toast and avoid the dev overlay.
+        // those into a toast and avoid the dev overlay. We keep them for a short
+        // grace period after signing to catch delayed rejections.
+        // Stronger temporary handlers: install capture-phase listeners AND
+        // temporarily override window's onerror/onunhandledrejection properties.
+        // This increases the chance we intercept wallet adapter emissions before
+        // Next's dev overlay consumes them.
         const onUnhandledRejection = (ev: PromiseRejectionEvent) => {
           try {
             const reason: any = (ev && (ev as any).reason) || null;
             try { console.debug('[dev-debug] unhandledrejection reason:', reason); } catch (e) {}
-            const msg = String(((reason && (reason.message || reason?.toString())) ?? reason) || '');
-            const name = String((reason && reason.name) ?? '').toLowerCase();
-            const isUserRejected = msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('user rejected') || name.includes('walletsigntransactionerror') || (reason && (reason.name === 'WalletSignTransactionError' || reason?.code === 4001));
-            if (isUserRejected) {
+            if (isUserRejection(reason)) {
               try { ev.preventDefault(); } catch (e) {}
+              try { ev.stopImmediatePropagation?.(); } catch (e) {}
+              try { ev.stopPropagation?.(); } catch (e) {}
               try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
             }
           } catch (e) {}
         };
+
         const onWindowError = (ev: ErrorEvent) => {
           try {
             const err: any = (ev && (ev as any).error) || null;
             try { console.debug('[dev-debug] window.error event:', { err, message: ev?.message, filename: ev?.filename, lineno: ev?.lineno, colno: ev?.colno }); } catch (e) {}
-            const msg = String(((err && (err.message || err?.toString())) ?? err) || (ev && ev.message) || '');
-            const name = String((err && err.name) ?? '').toLowerCase();
-            const isUserRejected = msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('user rejected') || name.includes('walletsigntransactionerror') || (err && (err.name === 'WalletSignTransactionError' || err?.code === 4001));
-            if (isUserRejected) {
+            if (isUserRejection(err ?? ev?.message)) {
               try { ev.preventDefault(); } catch (e) {}
+              try { ev.stopImmediatePropagation?.(); } catch (e) {}
+              try { ev.stopPropagation?.(); } catch (e) {}
               try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
             }
           } catch (e) {}
         };
+
+        // Save previous property handlers so we can restore them
+        const prevOnUnhandledRejection = (window as any).onunhandledrejection;
+        const prevOnError = (window as any).onerror;
+
+        const propUnhandled = (ev: any) => {
+          try {
+            const reason = ev?.reason ?? null;
+            if (isUserRejection(reason)) {
+              try { ev.preventDefault(); } catch (e) {}
+              try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+              return true;
+            }
+          } catch (e) {}
+          try { if (typeof prevOnUnhandledRejection === 'function') return prevOnUnhandledRejection(ev); } catch (e) {}
+          return false;
+        };
+
+        const propError = (message: any, source?: string, lineno?: number, colno?: number, error?: any) => {
+          try {
+            if (isUserRejection(error ?? message)) {
+              try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+              return true;
+            }
+          } catch (e) {}
+          try { if (typeof prevOnError === 'function') return prevOnError(message, source, lineno, colno, error); } catch (e) {}
+          return false;
+        };
+
         try {
-          try { window.addEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
-          try { window.addEventListener('error', onWindowError as any); } catch (e) {}
+          try { window.addEventListener('unhandledrejection', onUnhandledRejection as any, { capture: true }); } catch (e) {}
+          try { window.addEventListener('error', onWindowError as any, { capture: true }); } catch (e) {}
+          try { (window as any).onunhandledrejection = propUnhandled; } catch (e) {}
+          try { (window as any).onerror = propError; } catch (e) {}
           const doSign: any = signTransaction;
           if (typeof doSign !== 'function') {
             try { toast({ title: 'Wallet not supported', description: 'Your wallet does not provide `signTransaction`. Use a wallet adapter that supports signTransaction.' }); } catch (e) {}
             return;
           }
           try {
-            signedTx = await doSign(tx as any);
-            try { console.debug('[dev-debug] signTransaction resolved, signedTx:', signedTx); } catch (e) {}
-          } catch (signErr: any) {
-            try { console.debug('[dev-debug] signTransaction threw:', signErr); } catch (e) {}
-            const msg = String((signErr && (signErr.message || signErr?.toString())) ?? signErr);
-            const name = String((signErr && signErr.name) ?? '').toLowerCase();
-            const isUserRejected = msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('user rejected') || name.includes('walletsigntransactionerror') || (signErr && (signErr.name === 'WalletSignTransactionError' || signErr?.code === 4001));
-            if (isUserRejected) {
+            // Use safeCall to ensure no unhandled rejections escape from the
+            // wallet adapter's signTransaction implementation.
+            const signOutcome = await safeCall(() => doSign(tx as any));
+            if (!signOutcome.ok) {
+              const signErr = signOutcome.err;
+              try { console.debug('[dev-debug] signTransaction threw (wrapped):', signErr); } catch (e) {}
+              if (isUserRejection(signErr)) {
+                try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
+                return;
+              }
+              const msg = getErrMessage(signErr) || String(signErr);
+              try { toast({ title: 'Failed to sign', description: msg || 'An error occurred while signing the transaction.' }); } catch (e) {}
+              return;
+            }
+            signedTx = signOutcome.value;
+            try { console.debug('[dev-debug] signTransaction resolved (wrapped), signedTx:', signedTx); } catch (e) {}
+          } catch (outerSignErr) {
+            try { console.debug('[dev-debug] signTransaction outer threw:', outerSignErr); } catch (e) {}
+            // defensive fallback
+            if (isUserRejection(outerSignErr)) {
               try { toast({ title: 'Signature cancelled', description: 'You cancelled the signature request.' }); } catch (e) {}
               return;
             }
-            try { toast({ title: 'Failed to sign', description: msg || 'An error occurred while signing the transaction.' }); } catch (e) {}
+            try { toast({ title: 'Failed to sign', description: String(outerSignErr) }); } catch (e) {}
             return;
           }
         } finally {
-          try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
-          try { window.removeEventListener('error', onWindowError as any); } catch (e) {}
+          // Keep the listeners alive for a short grace period to catch delayed
+          // unhandled rejections some adapters emit after the signing call.
+          try {
+            // extend grace period for adapters that emit delayed rejections
+            setTimeout(() => {
+              try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (e) {}
+              try { window.removeEventListener('error', onWindowError as any); } catch (e) {}
+            }, 2500);
+          } catch (e) {
+            try { window.removeEventListener('unhandledrejection', onUnhandledRejection as any); } catch (ee) {}
+            try { window.removeEventListener('error', onWindowError as any); } catch (ee) {}
+          }
         }
 
         let txid: string | null = null;
@@ -881,14 +980,13 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
                     // Same robust wrapper for re-sign
                     let signOutcome2: { ok: true; value: any } | { ok: false; err: any };
                     try {
-                      const p2 = doSignAgain(tx as any);
-                      signOutcome2 = await p2.then((v: any) => ({ ok: true as const, value: v })).catch((err: any) => ({ ok: false as const, err }));
-                    } catch (syncErr2) {
-                      signOutcome2 = { ok: false as const, err: syncErr2 };
+                      signOutcome2 = await safeCall(() => doSignAgain(tx as any));
+                    } catch (e) {
+                      signOutcome2 = { ok: false as const, err: e };
                     }
                     if (!signOutcome2.ok) {
                       const signErr2 = signOutcome2.err;
-                      const msg2 = String((signErr2 && (signErr2.message || signErr2?.toString())) ?? signErr2);
+                      const msg2 = getErrMessage(signErr2) || String(signErr2);
                       const name2 = String((signErr2 && signErr2.name) ?? '').toLowerCase();
                       const isUserRejected2 = msg2.toLowerCase().includes('rejected') || msg2.toLowerCase().includes('user rejected') || name2.includes('walletsigntransactionerror') || (signErr2 && (signErr2.name === 'WalletSignTransactionError' || signErr2?.code === 4001));
                       if (isUserRejected2) {
@@ -976,7 +1074,17 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
         toast({ title: 'Burn submitted', description: `Tx ${txid}` });
         try { router.push('/success'); } catch (e) { try { window.location.href = '/success'; } catch (e) {} }
       } catch (err: any) {
-        const message = err?.message || String(err);
+        const message = (() => {
+          try {
+            if (!err && err !== 0) return '';
+            if (typeof err === 'string') return err;
+            if (typeof err === 'number') return String(err);
+            if (err instanceof Error && err.message) return String(err.message);
+            if (err && typeof err.message === 'string') return err.message;
+            if (err && typeof err.toString === 'function') return err.toString();
+            try { return JSON.stringify(err); } catch (je) { return String(err); }
+          } catch (outer) { return String(err); }
+        })();
         // surface blockhash special case
           if (message && message.toLowerCase().includes('blockhash')) {
           toast({ title: 'Burn failed: Blockhash expired', description: 'Please re-open the modal and try again.' });
