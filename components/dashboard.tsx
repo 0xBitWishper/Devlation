@@ -1038,10 +1038,10 @@ export function Dashboard({ onBurnClick, onHistoryClick }: DashboardProps) {
               History
             </button>
             <button
-              onClick={() => router.push("/public-burn-history")}
+              onClick={() => router.push("/block-transaction")}
               className="px-4 py-2.5 rounded-lg border border-border/40 text-foreground font-medium hover:bg-card/50 smooth-transition text-sm"
             >
-              Blok
+              Block Transaction
             </button>
             <button
               onClick={() => router.push("/reward")}

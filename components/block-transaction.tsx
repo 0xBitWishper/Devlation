@@ -16,20 +16,17 @@ export function TokenBurnHistory({ records, onBack }: BurnHistoryProps) {
   const [search, setSearch] = useState("");
   const router = useRouter();
 
-  // If only one record, treat as detail mode
-  const isDetail = records.length === 1;
-  const filteredRecords = isDetail
-    ? records
-    : records.filter(
-        (r) => {
-          const q = search.toLowerCase();
-          return (
-            r.tokenSymbol.toLowerCase().includes(q) ||
-            r.tokenName.toLowerCase().includes(q) ||
-            (r.mint && r.mint.toLowerCase().includes(q))
-          );
-        }
+  // Always allow navigation to detail, even if only one record
+  const filteredRecords = records.filter(
+    (r) => {
+      const q = search.toLowerCase();
+      return (
+        r.tokenSymbol.toLowerCase().includes(q) ||
+        r.tokenName.toLowerCase().includes(q) ||
+        (r.mint && r.mint.toLowerCase().includes(q))
       );
+    }
+  );
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString("en-US", {
@@ -60,28 +57,26 @@ export function TokenBurnHistory({ records, onBack }: BurnHistoryProps) {
                 <img src="/devflation_logo.png" alt="Devflation Logo" className="w-8 h-8 object-contain" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground tracking-tight">Blok</h1>
+                <h1 className="text-2xl font-bold text-foreground tracking-tight">Block Transaction</h1>
                 <p className="text-xs text-muted-foreground">View all your token burns</p>
               </div>
             </div>
           </div>
           {/* Right: Search and total burns */}
-          {!isDetail && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto md:justify-end mt-3 md:mt-0">
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search token..."
-                className="px-3 py-2 rounded-lg border border-border bg-background/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#9945FF] transition w-full sm:w-64"
-                style={{ minWidth: 0 }}
-              />
-              <div className="text-right sm:ml-4">
-                <p className="text-sm font-semibold text-foreground">{filteredRecords.length}</p>
-                <p className="text-xs text-muted-foreground">Total Burns</p>
-              </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto md:justify-end mt-3 md:mt-0">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search token..."
+              className="px-3 py-2 rounded-lg border border-border bg-background/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#9945FF] transition w-full sm:w-64"
+              style={{ minWidth: 0 }}
+            />
+            <div className="text-right sm:ml-4">
+              <p className="text-sm font-semibold text-foreground">{filteredRecords.length}</p>
+              <p className="text-xs text-muted-foreground">Total Burns</p>
             </div>
-          )}
+          </div>
         </div>
       </header>
 
@@ -93,7 +88,7 @@ export function TokenBurnHistory({ records, onBack }: BurnHistoryProps) {
             <span className="text-sm font-bold text-[#9945FF]">0.43 / 1 SOL</span>
           </div>
             <p className="text-xs text-muted-foreground leading-relaxed mt-0">
-              <span className="font-medium text-foreground">Fees</span> will be used to <span className="font-semibold text-[#9945FF]">buy</span>, then <span className="font-semibold text-[#14F195]">burn</span> the <span className="font-bold text-[#9945FF]">$DFT</span> token.
+              <span className="font-medium text-foreground">Fees</span> will be used to <span className="font-semibold text-[#9945FF]">buy</span>, then <span className="font-semibold text-[#14F195]">burn</span> the <span className="font-bold text-[#9945FF]">$DEVF</span> token.
             </p>
           <div className="w-full bg-border/60 rounded-xl shadow-inner h-4 flex items-center overflow-hidden border border-border/30 mt-1 relative">
             {/* Progress fill */}
@@ -134,9 +129,9 @@ export function TokenBurnHistory({ records, onBack }: BurnHistoryProps) {
             {filteredRecords.map((record) => (
               <div
                 key={record.id}
-                className={`rounded-lg backdrop-blur-xl border border-white/10 border-border/40 p-4 ${isDetail ? '' : 'hover:bg-card/30 cursor-pointer smooth-transition'}`}
+                className={`rounded-lg backdrop-blur-xl border border-white/10 border-border/40 p-4 hover:bg-card/30 cursor-pointer smooth-transition`}
                 style={{ backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-                {...(!isDetail && { onClick: () => router.push(`/blok/${record.mint}`) })}
+                onClick={() => router.push(`/block-transaction/${record.mint}`)}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 flex-1">
